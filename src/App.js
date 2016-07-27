@@ -1,12 +1,15 @@
 /*
- import appy-style
+// import appy-style
 
- create a dummy model store
- create a model store using immutable js
-
- render SVG w/ a few rects in it
+ //create a dummy model store
+ render SVG w/ a rect
  buttons for undo/redo/new/delete
 
+ have 3 rects at once
+ switch selection between rects
+ when selecting rect, visually show it differently
+
+ create a model store using immutable js
  selection class, is it versioned with undos?
 
  when selecting rects, show union or intersection of properties in a generic property editor

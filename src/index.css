@@ -28,3 +28,10 @@ h3.header {
     padding: 0.25em;
     margin:0;
 }
+
+rect.selected {
+    fill: red;
+    stroke-width: 3;
+}
+
+

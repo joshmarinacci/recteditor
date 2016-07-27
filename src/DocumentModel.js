@@ -16,6 +16,7 @@ var DocumentModel = {
     },
     setSelected(obj) {
         this.selected = obj;
+        log("selected");
     },
     setProperty(obj,key,val,format) {
         this.model[key] = val;
