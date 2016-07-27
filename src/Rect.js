@@ -4,6 +4,7 @@
 
 import React, { Component } from 'react';
 import DocumentModel from "./DocumentModel"
+import {log} from "./util";
 
 class Rect extends Component {
     constructor(props) {
@@ -19,11 +20,18 @@ class Rect extends Component {
 
     render() {
         var selected = DocumentModel.isSelected(this.props.model);
-        var rect = <rect ref='rect' width={this.props.model.get('w')}
-                         height={this.props.model.get('h')}
-                         x={this.props.model.get('x')}
-                         y={this.props.model.get('y')}
-                         fill="cyan" stroke="black"
+        var mod = this.props.model;
+        function g(key) {
+            return DocumentModel.getProperty(mod,key);
+        }
+        var rect = <rect ref='rect'
+                         width={g('w')}
+                         height={g('h')}
+                         x={g('x')}
+                         y={g('y')}
+                         fill={g('fill')}
+                         stroke={g('stroke')}
+                         strokeWidth={g('strokeWidth')}
                          className={selected?"selected":"unselected"}
                          onMouseDown={this.mouseDown.bind(this)}
                          onMouseMove={this.mouseMove.bind(this)}
@@ -33,7 +41,6 @@ class Rect extends Component {
     }
 
     mouseDown(e) {
-        console.log("clicked");
         var bounds = this.props.canvas.refs.canvas.getBoundingClientRect();
         var curr = {x: e.clientX - bounds.left, y: e.clientY - bounds.top};
         this.setState({
@@ -56,7 +63,7 @@ class Rect extends Component {
         var bounds = this.props.canvas.refs.canvas.getBoundingClientRect();
         var curr = {x: e.clientX - bounds.left, y: e.clientY - bounds.top};
         var diff = {x: curr.x - this.state.prev.x, y: curr.y - this.state.prev.y};
-        DocumentModel.moved(this.props.index, diff);
+        DocumentModel.moved(this.props.model, diff);
         this.setState({
             prev: curr
         });

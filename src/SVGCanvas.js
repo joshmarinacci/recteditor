@@ -10,12 +10,9 @@ class SVGCanvas extends Component {
     }
 
     renderModel(model) {
-        var m = {
-            get: function (key) {
-                return model[key]
-            }
-        };
-        return <Rect model={m} canvas={this}/>
+        return model.map((mod,i)=>{
+            return <Rect key={i} model={mod} canvas={this}/>
+        })
     }
 
     render() {

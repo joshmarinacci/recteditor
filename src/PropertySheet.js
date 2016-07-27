@@ -18,6 +18,7 @@ class PropertySheet extends Component {
     }
 
     renderProperties(target) {
+        if(!target) return "";
         return Object.keys(target).sort().map((key)=>{
             return <div className="hbox" key={key}>
                 <label>{key}</label>

@@ -2,8 +2,8 @@
 // import appy-style
 
  //create a dummy model store
- render SVG w/ a rect
- buttons for undo/redo/new/delete
+ //render SVG w/ a rect
+ //buttons for undo/redo/new/delete
 
  have 3 rects at once
  switch selection between rects
@@ -12,27 +12,11 @@
  create a model store using immutable js
  selection class, is it versioned with undos?
 
- when selecting rects, show union or intersection of properties in a generic property editor
-
+ when selecting rects, show union or intersection of properties
+    in a generic property editor
  std properties:
-
- rect {
- x:
- y:
- w:
- h:
- color:
- strokeWidth:
-
-
- strokeColor:
- }
-
  list view, shows list of rects, and which are selected
-
  panels can be collapsed
-
-
  */
 import React, { Component } from 'react';
 import "./appy-style/layout.css";
@@ -68,22 +52,17 @@ class App extends Component {
     }
 
     propertyChanged(target, key, val, format) {
-        console.log("got", key, val, format);
+        console.log('target is',target);
         if (format === 'number') {
             var value = Number.parseFloat(val);
             DocumentModel.setProperty(target,key,value,format);
-            //this.state.target[key] = value;
         } else {
-            //this.state.target[key] = val;
             DocumentModel.setProperty(target,key,val,format);
         }
-        //console.log("final value =", this.state.target[key]);
-        //this.setState({target: this.state.target})
     }
 
     add() {
-        log("adding")
-        DocumentModel.moved(0,{x:20,y:0});
+        DocumentModel.moved(DocumentModel.getSelected(),{x:20,y:0});
     }
 
     render() {
@@ -103,7 +82,7 @@ class App extends Component {
                     <div className="vbox">
                         <div className="grow scroll pane right-pane">
                             <PropertySheet
-                                target={DocumentModel.getModel()}
+                                target={DocumentModel.getSelected()}
                                 format={this.state.format}
                                 onChange={this.propertyChanged.bind(this)}
                             />
