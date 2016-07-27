@@ -52,7 +52,6 @@ class App extends Component {
     }
 
     propertyChanged(target, key, val, format) {
-        console.log('target is',target);
         if (format === 'number') {
             var value = Number.parseFloat(val);
             DocumentModel.setProperty(target,key,value,format);
