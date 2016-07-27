@@ -2,6 +2,8 @@
  * Created by josh on 7/27/16.
  */
 
+import {log} from "./util";
+
 var DocumentModel = {
     selected: null,
     listeners: [],
@@ -14,6 +16,10 @@ var DocumentModel = {
     },
     setSelected(obj) {
         this.selected = obj;
+    },
+    setProperty(obj,key,val,format) {
+        this.model[key] = val;
+        this.listeners.forEach((cb)=>{cb()})
     },
     moved(index, diff) {
         this.model.x += diff.x;

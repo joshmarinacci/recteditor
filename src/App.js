@@ -66,12 +66,14 @@ class App extends Component {
         console.log("got", key, val, format);
         if (format === 'number') {
             var value = Number.parseFloat(val);
-            this.state.target[key] = value;
+            DocumentModel.setProperty(target,key,value,format);
+            //this.state.target[key] = value;
         } else {
-            this.state.target[key] = val;
+            //this.state.target[key] = val;
+            DocumentModel.setProperty(target,key,val,format);
         }
-        console.log("final value =", this.state.target[key]);
-        this.setState({target: this.state.target})
+        //console.log("final value =", this.state.target[key]);
+        //this.setState({target: this.state.target})
     }
 
     add() {
