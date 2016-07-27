@@ -10,6 +10,11 @@ body {
     min-width: 15em;
     font-size: 80%;
 }
+svg {
+    border: 1px solid red;
+    width: 100%;
+    height: 300px;
+}
 #property-sheet .hbox {
     margin-top:0;
     margin-bottom: 0;
