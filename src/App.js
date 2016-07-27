@@ -23,6 +23,8 @@
  h:
  color:
  strokeWidth:
+
+
  strokeColor:
  }
 
