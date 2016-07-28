@@ -36,6 +36,7 @@ class Rect extends Component {
                          onMouseDown={this.mouseDown.bind(this)}
                          onMouseMove={this.mouseMove.bind(this)}
                          onMouseUp={this.mouseUp.bind(this)}
+
         />;
         return rect
     }

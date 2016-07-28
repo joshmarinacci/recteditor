@@ -14,6 +14,7 @@ svg {
     border: 1px solid red;
     width: 100%;
     height: 300px;
+    background-color: #fff;
 }
 #property-sheet .hbox {
     margin-top:0;
@@ -30,8 +31,7 @@ h3.header {
 }
 
 rect.selected {
-    fill: red;
-    stroke-width: 3;
+    filter: url("#white-glow")
 }
 
 

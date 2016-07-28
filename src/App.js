@@ -1,20 +1,21 @@
 /*
-// import appy-style
+//import appy-style
 
  //create a dummy model store
  //render SVG w/ a rect
  //buttons for undo/redo/new/delete
 
- have 3 rects at once
- switch selection between rects
- when selecting rect, visually show it differently
+ //have 3 rects at once
+ //switch selection between rects
 
+* when selecting rect, visually show it differently,
+    but don't obscure the stroke and fill
+
+* selection class which allows multiple rects w/ shared editing and dragging
+
+* editing color doesn't work.
  create a model store using immutable js
  selection class, is it versioned with undos?
-
- when selecting rects, show union or intersection of properties
-    in a generic property editor
- std properties:
  list view, shows list of rects, and which are selected
  panels can be collapsed
  */
@@ -26,10 +27,6 @@ import PropertySheet from "./PropertySheet";
 import SVGCanvas from "./SVGCanvas";
 import DocumentModel from "./DocumentModel"
 import {log} from "./util";
-
-
-
-
 
 class App extends Component {
     constructor(props) {
