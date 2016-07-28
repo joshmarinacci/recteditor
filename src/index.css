@@ -35,3 +35,40 @@ rect.selected {
 }
 
 
+/* dropdown for the color button */
+.dropbtn {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border: 1px solid red;
+}
+.dropdown {
+    /*position: relative;*/
+    display: inline-block;
+}
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    min-width: 128px;
+    border: 1px solid black;
+}
+.dropdown-content a {
+    color: black;
+    padding: 0.5em;
+    text-decoration: none;
+    display: inline-block;
+    border: 1px solid black;
+    padding:0;
+    margin:1px;
+}
+.dropdown-content a:hover {
+    border: 1px solid white;
+}
+.dropdown:hover .dropdown-content {
+    display: block;
+}
+.dropdown:hover .dropbtn {
+    background-color: #3e8e41;
+}
