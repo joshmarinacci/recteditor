@@ -16,29 +16,44 @@ class Rect extends Component {
         //make bound versions of some callbacks
         this.documentMouseMove_listener = this.documentMouseMove.bind(this);
         this.documentMouseUp_listener = this.documentMouseUp.bind(this);
+        this.documentResizerMouseMove_listener = this.documentResizerMouseMove.bind(this);
+        this.documentResizerMouseUp_listener   = this.documentResizerMouseUp.bind(this);
+    }
+
+    renderRect(mod, selected) {
+        function g(key) {
+            return DocumentModel.getProperty(mod,key);
+        }
+        return <rect ref='rect'
+                     width={g('w')}
+                     height={g('h')}
+                     fill={g('fill')}
+                     stroke={g('stroke')}
+                     strokeWidth={g('strokeWidth')}
+                     className={selected?"selected":"unselected"}
+                     onMouseDown={this.mouseDown.bind(this)}
+                     onMouseMove={this.mouseMove.bind(this)}
+                     onMouseUp={this.mouseUp.bind(this)}
+
+        />;
     }
 
     render() {
         var selected = DocumentModel.isSelected(this.props.model);
         var mod = this.props.model;
+
         function g(key) {
             return DocumentModel.getProperty(mod,key);
         }
-        var rect = <rect ref='rect'
-                         width={g('w')}
-                         height={g('h')}
-                         x={g('x')}
-                         y={g('y')}
-                         fill={g('fill')}
-                         stroke={g('stroke')}
-                         strokeWidth={g('strokeWidth')}
-                         className={selected?"selected":"unselected"}
-                         onMouseDown={this.mouseDown.bind(this)}
-                         onMouseMove={this.mouseMove.bind(this)}
-                         onMouseUp={this.mouseUp.bind(this)}
-
-        />;
-        return rect
+        var trans = "translate("+g('x')+","+g('y')+")";
+        var handle = "";
+        if(selected) {
+            handle = <circle r="8" cx={g('w')} cy={g('h')} onMouseDown={this.resizerMouseDown.bind(this)}/>
+        }
+        return <g transform={trans}>
+            {this.renderRect(mod,selected)}
+            {handle}
+        </g>
     }
 
     mouseDown(e) {
@@ -54,6 +69,19 @@ class Rect extends Component {
         document.addEventListener("mouseup", this.documentMouseUp_listener);
     }
 
+    resizerMouseDown(e) {
+        var bounds = this.props.canvas.refs.canvas.getBoundingClientRect();
+        var curr = {x: e.clientX - bounds.left, y: e.clientY - bounds.top};
+        this.setState({
+            pressed: true,
+            prev: curr
+        });
+        DocumentModel.setSelected(this.props.model);
+        //attach to the document
+        document.addEventListener("mousemove", this.documentResizerMouseMove_listener);
+        document.addEventListener("mouseup", this.documentResizerMouseUp_listener);
+    }
+
     mouseMove(e) {
     }
 
@@ -65,17 +93,25 @@ class Rect extends Component {
         var curr = {x: e.clientX - bounds.left, y: e.clientY - bounds.top};
         var diff = {x: curr.x - this.state.prev.x, y: curr.y - this.state.prev.y};
         DocumentModel.moved(this.props.model, diff);
-        this.setState({
-            prev: curr
-        });
+        this.setState({ prev: curr });
+    }
+    documentResizerMouseMove(e) {
+        var bounds = this.props.canvas.refs.canvas.getBoundingClientRect();
+        var curr = {x: e.clientX - bounds.left, y: e.clientY - bounds.top};
+        var diff = {x: curr.x - this.state.prev.x, y: curr.y - this.state.prev.y};
+        DocumentModel.resized(this.props.model, diff);
+        this.setState({ prev: curr });
     }
 
     documentMouseUp(e) {
         document.removeEventListener('mousemove', this.documentMouseMove_listener);
         document.removeEventListener('mouseup', this.documentMouseUp_listener);
-        this.setState({
-            pressed: false
-        })
+        this.setState({ pressed: false });
+    }
+    documentResizerMouseUp(e) {
+        document.removeEventListener('mousemove', this.documentResizerMouseMove_listener);
+        document.removeEventListener('mouseup', this.documentResizerMouseUp_listener);
+        this.setState({ pressed: false });
     }
 }
 

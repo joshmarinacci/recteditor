@@ -33,6 +33,11 @@ var DocumentModel = {
         model.y += diff.y;
         this.listeners.forEach((cb)=>{cb()})
     },
+    resized(model, diff) {
+        model.w += diff.x;
+        model.h += diff.y;
+        this.listeners.forEach((cb)=>{cb()})
+    },
     getModel() {
         return this.model
     }
