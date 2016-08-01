@@ -9,8 +9,7 @@ import {log} from "./util";
 class PropertySheet extends Component {
     changed(key) {
         var value = this.refs[key].value;
-        console.log("the key was changed",key,value);
-        this.props.onChange(this.props.target,key,value,this.props.format[key]);
+        this.props.target.setPropertyValue(key,value);
     }
     render() {
         return <div id="property-sheet">
@@ -21,13 +20,14 @@ class PropertySheet extends Component {
 
     renderProperties(target) {
         if(!target) return "";
-        return Object.keys(target).sort().map((key)=>{
+        return target.getCommonProps().sort().map((key) => {
             return <div className="hbox" key={key}>
                 <label>{key}</label>
-                {this.renderEditor(target,key,this.props.format[key])}
-                <label>{this.props.format[key]}</label>
+                {this.renderEditor(target,key,target.getFormat(key))}
+                <label>{target.getFormat(key)}</label>
             </div>
         });
+
     }
 
     renderEditor(target,key,format) {
@@ -35,13 +35,13 @@ class PropertySheet extends Component {
         return <input
             ref={key}
             type="text"
-            value={target[key]}
+            value={target.getPropertyValue(key)}
             size="10"
             onChange={this.changed.bind(this,key)}/>
     }
 
     renderColorEditor(target, key) {
-        return <ColorButton target={target} pkey={key} onChange={this.props.onChange}/>
+        return <ColorButton target={target} pkey={key}/>
     }
 
 }
@@ -69,6 +69,6 @@ class ColorButton extends Component {
     }
 
     changeColor(color) {
-        this.props.onChange(this.props.target, this.props.pkey,color,'color')
+        this.props.target.setPropertyValue(this.props.pkey,color);
     }
 }

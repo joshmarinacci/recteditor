@@ -4,7 +4,7 @@
 
 import React, { Component } from 'react';
 import DocumentModel from "./DocumentModel"
-import {log} from "./util";
+//import {log} from "./util";
 
 class Rect extends Component {
     constructor(props) {
@@ -57,26 +57,32 @@ class Rect extends Component {
     }
 
     mouseDown(e) {
+        e.stopPropagation();
         var bounds = this.props.canvas.refs.canvas.getBoundingClientRect();
         var curr = {x: e.clientX - bounds.left, y: e.clientY - bounds.top};
         this.setState({
             pressed: true,
             prev: curr
         });
-        DocumentModel.setSelected(this.props.model);
+        if(e.shiftKey) {
+            DocumentModel.addSelection(this.props.model);
+        } else {
+            DocumentModel.setSelection(this.props.model);
+        }
         //attach to the document
         document.addEventListener("mousemove", this.documentMouseMove_listener);
         document.addEventListener("mouseup", this.documentMouseUp_listener);
     }
 
     resizerMouseDown(e) {
+        e.stopPropagation();
         var bounds = this.props.canvas.refs.canvas.getBoundingClientRect();
         var curr = {x: e.clientX - bounds.left, y: e.clientY - bounds.top};
         this.setState({
             pressed: true,
             prev: curr
         });
-        DocumentModel.setSelected(this.props.model);
+        DocumentModel.setSelection(this.props.model);
         //attach to the document
         document.addEventListener("mousemove", this.documentResizerMouseMove_listener);
         document.addEventListener("mouseup", this.documentResizerMouseUp_listener);

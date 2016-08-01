@@ -26,35 +26,17 @@ import "./index.css";
 import PropertySheet from "./PropertySheet";
 import SVGCanvas from "./SVGCanvas";
 import DocumentModel from "./DocumentModel"
-import {log} from "./util";
+//import {log} from "./util";
 
 class App extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            format: {
-                x: 'number',
-                y: 'number',
-                w: 'number',
-                h: 'number',
-                fill: 'color',
-                stroke: 'color',
-                strokeWidth: 'number',
-                name: 'string'
-            }
+            model: null
         };
         DocumentModel.onUpdate(()=> {
-            this.setState({format:this.state.format});
+            this.setState({model:DocumentModel.getModel()});
         });
-    }
-
-    propertyChanged(target, key, val, format) {
-        if (format === 'number') {
-            var value = Number.parseFloat(val);
-            DocumentModel.setProperty(target,key,value,format);
-        } else {
-            DocumentModel.setProperty(target,key,val,format);
-        }
     }
 
     add() {
@@ -78,9 +60,7 @@ class App extends Component {
                     <div className="vbox">
                         <div className="grow scroll pane right-pane">
                             <PropertySheet
-                                target={DocumentModel.getSelected()}
-                                format={this.state.format}
-                                onChange={this.propertyChanged.bind(this)}
+                                target={DocumentModel.getSelectionProxy()}
                             />
                         </div>
                         <div className="">list</div>
