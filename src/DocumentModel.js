@@ -2,12 +2,11 @@
  * Created by josh on 7/27/16.
  */
 
-import {log} from "./util";
+//import {log} from "./util";
 
 class SelectionProxy {
     constructor(nodes,model) {
         this.nodes = nodes;
-        console.log('the nodes are',nodes);
         this.format =  {
             x: 'number',
             y: 'number',
@@ -54,6 +53,19 @@ class SelectionProxy {
             node[key] = val;
         });
         this.model.fireUpdate();
+    }
+    isIndeterminate(key) {
+        if(this.nodes.length <= 1) return false;
+
+        var val = this.nodes[0][key];
+        var diff = false;
+        this.nodes.forEach((node) => {
+            var v2 = node[key];
+            if(val !== v2) {
+                diff = true;
+            }
+        });
+        return diff;
     }
 }
 

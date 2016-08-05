@@ -72,3 +72,11 @@ rect.selected {
 .dropdown:hover .dropbtn {
     background-color: #3e8e41;
 }
+
+
+input {
+    border: 1px solid gray;
+}
+input.indeterminate {
+    border: 1px solid red;
+}

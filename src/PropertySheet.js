@@ -3,7 +3,47 @@
  */
 
 import React, { Component } from 'react';
-import {log} from "./util";
+import {renderClass} from "./util";
+
+
+class IndeterminateInput extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            value:props.target.getPropertyValue(props.name)
+        }
+    }
+    changed() {
+        var key = this.props.name;
+        var value = this.refs.input.value;
+        this.setState({
+            value:value
+        });
+        var format = this.props.target.getFormat(key);
+        if(format == 'number') {
+            var realValue = Number.parseFloat(value);
+            if(Number.isNaN(realValue)) {
+                return;
+            }
+            this.props.target.setPropertyValue(key,realValue);
+            return;
+        }
+        this.props.target.setPropertyValue(key,value);
+    }
+    render() {
+        var key = this.props.name;
+        var ind = this.props.target.isIndeterminate(key);
+        var clss = { };
+        if(ind) clss.indeterminate = true;
+        return <input
+            ref='input'
+            className={renderClass(clss)}
+            type="text"
+            value={this.state.value}
+            size="10"
+            onChange={this.changed.bind(this)}/>
+    }
+}
 
 
 class PropertySheet extends Component {
@@ -32,12 +72,12 @@ class PropertySheet extends Component {
 
     renderEditor(target,key,format) {
         if(format === 'color') return this.renderColorEditor(target,key);
-        return <input
-            ref={key}
-            type="text"
+        return <IndeterminateInput
+            target={target}
+            name={key}
             value={target.getPropertyValue(key)}
-            size="10"
-            onChange={this.changed.bind(this,key)}/>
+            key={key}
+        />;
     }
 
     renderColorEditor(target, key) {
@@ -47,7 +87,6 @@ class PropertySheet extends Component {
 }
 
 export default PropertySheet;
-
 
 class ColorButton extends Component {
 
