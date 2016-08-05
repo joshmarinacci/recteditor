@@ -13,6 +13,12 @@ class IndeterminateInput extends Component {
             value:props.target.getPropertyValue(props.name)
         }
     }
+    componentWillReceiveProps(nextProps) {
+        var v2 = nextProps.target.getPropertyValue(nextProps.name);
+        if(v2 !== this.state.value) {
+            this.setState({value:v2});
+        }
+    }
     changed() {
         var key = this.props.name;
         var value = this.refs.input.value;
