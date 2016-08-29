@@ -1,3 +1,4 @@
+import PubNub from "pubnub";
 /**
  * Created by josh on 7/27/16.
  */
@@ -74,6 +75,42 @@ var DocumentModel = {
     selected: [],
     listeners: [],
     model: [],
+    connect() {
+        console.log("connecting to pubnub", PubNub);
+        this.pubnub = new PubNub({
+            publishKey:'pub-c-84cc1e5d-138c-4366-a642-f2f8c6d63fac',
+            subscribeKey:'sub-c-386922f6-6e17-11e6-91d9-02ee2ddab7fe',
+            uuid: 'my_uuid'+Math.floor(Math.random()*1000)
+        });
+        var self = this;
+        this.pubnub.addListener({
+            status: function(status) {
+                console.log("got status",status);
+            },
+            message: function(message) {
+                if(message.message.uuid == self.pubnub.getUUID()) return;
+                if(message.subscribedChannel == 'document') {
+                    self.processDocumentChange(message.message);
+                }
+            },
+            presence: function(pres) {
+                console.log("got presence",pres);
+            }
+        });
+        this.pubnub.subscribe({
+            channels:['document']
+        })
+    },
+
+    processDocumentChange(msg) {
+        var node = this.model.find((o)=>o.name == msg.id);
+        ['x','y','w','h'].forEach((prop)=>{
+            if(msg[prop]) {
+                node[prop] = msg[prop];
+            }
+        });
+        this.listeners.forEach((cb)=>{cb()})
+    },
     onUpdate(cb) {
         this.listeners.push(cb);
     },
@@ -101,19 +138,32 @@ var DocumentModel = {
     getProperty(obj,key) {
         return obj[key];
     },
-    setProperty(obj,key,val,format) {
-        obj[key] = val;
+    //setProperty(obj,key,val,format) {
+    //    obj[key] = val;
+    //    this.listeners.forEach((cb)=>{cb()})
+    //},
+    publish(model, props){
+        var payload = {};
+        payload.id = model.name;
+        payload.uuid = this.pubnub.getUUID();
+        props.forEach((prop)=>{
+            payload[prop] = model[prop]
+        });
+        this.pubnub.publish({
+            channel:'document',
+            message: payload
+        });
         this.listeners.forEach((cb)=>{cb()})
     },
     moved(model, diff) {
         model.x += diff.x;
         model.y += diff.y;
-        this.listeners.forEach((cb)=>{cb()})
+        this.publish(model,['x','y']);
     },
     resized(model, diff) {
         model.w += diff.x;
         model.h += diff.y;
-        this.listeners.forEach((cb)=>{cb()})
+        this.publish(model,['w','h']);
     },
     getModel() {
         return this.model
@@ -141,5 +191,7 @@ DocumentModel.model.push({
     stroke: '#00ff00',
     strokeWidth: 3
 });
+
+DocumentModel.connect();
 
 export default DocumentModel;
