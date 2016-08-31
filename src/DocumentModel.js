@@ -91,7 +91,7 @@ var DocumentModel = {
             message: function(message) {
                 if(message.message.uuid == self.pubnub.getUUID()) return;
                 if(message.subscribedChannel == 'document') {
-                    self.processDocumentChange(message.message);
+                    self.processRemoteChange(message.message);
                 }
             },
             presence: function(pres) {
@@ -103,7 +103,7 @@ var DocumentModel = {
         })
     },
 
-    processDocumentChange(msg) {
+    processRemoteChange(msg) {
         var node = this.model.find((o)=>o.name == msg.id);
         ['x','y','w','h'].forEach((prop)=>{
             if(msg[prop]) {
@@ -135,8 +135,15 @@ var DocumentModel = {
     },
     deleteSelection() {
         this.selected.forEach((rect)=>{
-            console.log("deleting",rect);
+            var n = this.model.indexOf(rect);
+            if(n >= 0) {
+                this.model.splice(n,1);
+            } else {
+                console.log("warning! node not found",rect);
+            }
         });
+        this.selected = [];
+        this.listeners.forEach((cb)=>{cb()})
     },
     getSelectionProxy() {
         return new SelectionProxy(this.selected,this);
