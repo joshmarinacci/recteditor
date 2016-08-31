@@ -21,6 +21,9 @@ class App extends Component {
     add() {
         DocumentModel.addRect(DocumentModel.createRect());
     }
+    delete() {
+        DocumentModel.deleteSelection();
+    }
 
     render() {
         return (
@@ -28,7 +31,7 @@ class App extends Component {
                 <h3 className="header">Shared Rect Editor</h3>
                 <div className="hbox toolbar">
                     <button onClick={this.add.bind(this)}>add</button>
-                    <button>delete</button>
+                    <button onClick={this.delete.bind(this)}>delete</button>
                     <button>undo</button>
                     <button>redo</button>
                 </div>

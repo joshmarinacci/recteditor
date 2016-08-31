@@ -133,6 +133,11 @@ var DocumentModel = {
         this.selected = [];
         this.listeners.forEach((cb)=>{cb()})
     },
+    deleteSelection() {
+        this.selected.forEach((rect)=>{
+            console.log("deleting",rect);
+        });
+    },
     getSelectionProxy() {
         return new SelectionProxy(this.selected,this);
     },
