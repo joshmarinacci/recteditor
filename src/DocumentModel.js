@@ -24,6 +24,7 @@ class SelectionProxy {
         var props = {};
         this.nodes.forEach((node)=> {
             Object.keys(node).map((key)=> {
+                if(key == 'id') return;
                 if(!props[key]) props[key]=0;
                 props[key]++;
             });
@@ -167,30 +168,27 @@ var DocumentModel = {
     },
     getModel() {
         return this.model
+    },
+    createRect() {
+        return {
+            id: Math.floor(Math.random()*1*1000*1000),
+            name:'unamed rect',
+            x: 100,
+            y: 100,
+            w: 100,
+            h: 100,
+            fill: '#ff0000',
+            stroke:"#000000",
+            strokeWidth:1
+        }
+    },
+    addRect(rect) {
+        this.model.push(rect);
+        this.listeners.forEach((cb)=>{cb()})
     }
 };
 
-DocumentModel.model.push({
-    name: 'unknown',
-    x: 0,
-    y: 20,
-    w: 50,
-    h: 30,
-    fill: '#00ffff',
-    stroke: '#000000',
-    strokeWidth: 1
-});
-
-DocumentModel.model.push({
-    name: 'unknown2',
-    x: 100,
-    y: 20,
-    w: 50,
-    h: 30,
-    fill: '#ffff00',
-    stroke: '#00ff00',
-    strokeWidth: 3
-});
+DocumentModel.addRect(DocumentModel.createRect());
 
 DocumentModel.connect();
 

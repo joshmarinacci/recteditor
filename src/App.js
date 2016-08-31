@@ -1,24 +1,3 @@
-/*
-//import appy-style
-
- //create a dummy model store
- //render SVG w/ a rect
- //buttons for undo/redo/new/delete
-
- //have 3 rects at once
- //switch selection between rects
-
-* when selecting rect, visually show it differently,
-    but don't obscure the stroke and fill
-
-* selection class which allows multiple rects w/ shared editing and dragging
-
-* editing color doesn't work.
- create a model store using immutable js
- selection class, is it versioned with undos?
- list view, shows list of rects, and which are selected
- panels can be collapsed
- */
 import React, { Component } from 'react';
 import "./appy-style/layout.css";
 import "./appy-style/look.css";
@@ -40,7 +19,7 @@ class App extends Component {
     }
 
     add() {
-        DocumentModel.moved(DocumentModel.getSelected(),{x:20,y:0});
+        DocumentModel.addRect(DocumentModel.createRect());
     }
 
     render() {
