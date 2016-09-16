@@ -26,7 +26,7 @@ class IndeterminateInput extends Component {
             value:value
         });
         var format = this.props.target.getFormat(key);
-        if(format == 'number') {
+        if(format === 'number') {
             var realValue = Number.parseFloat(value);
             if(Number.isNaN(realValue)) {
                 return;

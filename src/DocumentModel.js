@@ -3,7 +3,7 @@ import PubNub from "pubnub";
  * Created by josh on 7/27/16.
  */
 
-//import {log} from "./util";
+const COLORS = ['red','blue','green','orange','yellow','purple','brown','lightBlue'];
 
 class SelectionProxy {
     constructor(nodes,model) {
@@ -24,9 +24,10 @@ class SelectionProxy {
         var props = {};
         this.nodes.forEach((node)=> {
             Object.keys(node).map((key)=> {
-                if(key == 'id') return;
+                if(key === 'id') return "";
                 if(!props[key]) props[key]=0;
                 props[key]++;
+                return "";
             });
         });
         var p2 = [];
@@ -72,16 +73,24 @@ class SelectionProxy {
 }
 
 
+function pick(arr) {
+    return arr[Math.floor(Math.random()*arr.length)];
+}
+
 var DocumentModel = {
     selected: [],
     listeners: [],
     model: [],
+    users:{},
+    fire: function() {
+        this.listeners.forEach((cb)=>{cb()})
+    },
     connect() {
         console.log("connecting to pubnub", PubNub);
         this.pubnub = new PubNub({
             publishKey:'pub-c-84cc1e5d-138c-4366-a642-f2f8c6d63fac',
             subscribeKey:'sub-c-386922f6-6e17-11e6-91d9-02ee2ddab7fe',
-            uuid: 'my_uuid'+Math.floor(Math.random()*1000)
+            uuid: 'my_uuid'+Math.floor(Math.random()*1000),
         });
         var self = this;
         this.pubnub.addListener({
@@ -89,33 +98,80 @@ var DocumentModel = {
                 console.log("got status",status);
             },
             message: function(message) {
-                if(message.message.uuid == self.pubnub.getUUID()) return;
-                if(message.message.type == 'add') {
+                if(message.message.uuid === self.pubnub.getUUID()) return;
+                if(message.message.type === 'add') {
                     self.processRemoteAdd(message.message);
                 }
-                if(message.message.type == 'delete') {
+                if(message.message.type === 'delete') {
                     self.processRemoteDelete(message.message);
                 }
-                if(message.message.type == 'change') {
+                if(message.message.type === 'change') {
                     self.processRemoteChange(message.message);
                 }
             },
             presence: function(pres) {
                 console.log("got presence",pres);
+                if(pres.action == 'state-change') {
+                    console.log("it's state changing");
+                    self.users[pres.uuid] = {
+                        username:pres.state.username,
+                        color: pres.state.color
+                    };
+                    self.fire();
+                }
+                console.log("users are", self.users);
             }
         });
         this.pubnub.subscribe({
+            channels:['document'],
+            withPresence:true
+        });
+        this.users[this.pubnub.getUUID()] = {
+            username:'unnamed-user',
+            color: pick(COLORS),
+        };
+
+
+        setTimeout(()=> {
+            this.pubnub.hereNow({
+                channels:['document'],
+                includeUUIDs:true,
+                includeState:true
+            },function(status,resp){
+                console.log("herenow",status,resp);
+                var oc = resp.channels.document.occupants;
+                console.log("oc = ", oc);
+                oc.forEach((state)=>{
+                    console.log(state);
+                    if(state.state) {
+                        self.users[state.uuid] = state.state;
+                    }
+                })
+                self.fire();
+            });
+        },1000);
+    },
+
+    getUsers() {
+        return this.users;
+    },
+
+    setUsername(username) {
+        this.pubnub.setState({
+            state:{
+                username:username,
+                color:this.users[this.pubnub.getUUID()].color
+            },
             channels:['document']
         })
     },
-
 
     processRemoteAdd(msg) {
         this.model.push(msg.node);
         this.listeners.forEach((cb)=>{cb()})
     },
     findLocalRect(node) {
-        return this.model.find((rect)=>rect.id==node.id);
+        return this.model.find((rect)=>rect.id===node.id);
     },
     removeLocalRect(node) {
         var n = this.model.indexOf(node);

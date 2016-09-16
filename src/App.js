@@ -7,11 +7,24 @@ import SVGCanvas from "./SVGCanvas";
 import DocumentModel from "./DocumentModel"
 //import {log} from "./util";
 
+class UserList extends Component {
+    render() {
+        return <b>{Object.keys(this.props.users).map((name,i) => {
+            var user = this.props.users[name];
+            return <a key={i} style={{
+                backgroundColor:user.color,
+                border: '1px solid white'
+            }}>{user.username} </a>
+        })}</b>
+    }
+}
+
 class App extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            model: null
+            model: null,
+            username: 'someuser'
         };
         DocumentModel.onUpdate(()=> {
             this.setState({model:DocumentModel.getModel()});
@@ -25,6 +38,19 @@ class App extends Component {
         DocumentModel.deleteSelection();
     }
 
+    editUsername() {
+        this.setState({
+            username: this.refs.username.value
+        })
+    }
+
+    editUsernameEnter(e) {
+        if(e.keyCode === 13) {
+            console.log("changing name to ", this.state.username);
+            DocumentModel.setUsername(this.state.username);
+        }
+    }
+
     render() {
         return (
             <div className="fill vbox">
@@ -34,6 +60,10 @@ class App extends Component {
                     <button onClick={this.delete.bind(this)}>delete</button>
                     <button>undo</button>
                     <button>redo</button>
+                    <span className="grow"></span>
+                    <UserList users={DocumentModel.getUsers()}/>
+                    <span className="grow"></span>
+                    <input type="text" ref='username' value={this.state.username} onChange={this.editUsername.bind(this)} onKeyDown={this.editUsernameEnter.bind(this)}/>
                 </div>
                 <div className="hbox grow">
                     <div className="grow">

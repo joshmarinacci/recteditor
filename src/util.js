@@ -14,3 +14,4 @@ exports.renderClass = function(cls) {
     }
     return str;
 };
+
