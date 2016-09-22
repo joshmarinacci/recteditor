@@ -62,9 +62,9 @@ class User {
         this.pos = -1;
     }
     addOp(op) {
-        p("user",this.id,'adding op',op);
+        p("user",this.id,'adding op',op.props);
         this.ops.push(op);
-        this.pos += 1;
+        this.pos = this.ops.length-1;
         console.log("ops length = ", this.ops.length)
     }
     create(id,props, remote) {
@@ -100,6 +100,11 @@ class User {
         if(op.op == 'set') {
             this.getObject(op.id).setProps(op.props,false,true);
         }
+    }
+    hasRedo() {
+        p("len = ", this.ops.length, "pos",this.pos);
+        return (this.ops.length-1 > this.pos);
+        //return false;
     }
 }
 
@@ -224,24 +229,26 @@ var tests = {
         rect.setProps({x:25});
         rect.setProps({x:50});
         rect.setProps({x:100});
+        assert.equal(a.hasRedo(),false);
         assert.equal(b.getObject('foo').getProp('x'),100);
         a.undo();
         assert.equal(b.getObject('foo').getProp('x'),50);
+        assert.equal(a.hasRedo(),true);
         a.undo();
         assert.equal(b.getObject('foo').getProp('x'),25);
         a.redo();
         assert.equal(b.getObject('foo').getProp('x'),50);
         a.redo();
         assert.equal(b.getObject('foo').getProp('x'),100);
-        return;
+        assert.equal(a.getObject('foo').getProp('x'),100);
         a.undo();
-        assert(rect.getProp('x'),50);
-        assert(a.hasRedo(),true);
+        assert.equal(a.getObject('foo').getProp('x'),50);
+        assert.equal(a.hasRedo(),true);
         rect.setProps({x:200});
-        assert(rect.getProp('x'),200);
-        assert(a.hasRedo(),false);
-        assert(b.hasRedo(),false);
-        assert(b.getObject('foo').getProp('x'),200);
+        assert.equal(rect.getProp('x'),200);
+        assert.equal(a.hasRedo(),false);
+        assert.equal(b.hasRedo(),false);
+        assert.equal(b.getObject('foo').getProp('x'),200);
     },
 
     test_conflict_force_reload_api: function() {
