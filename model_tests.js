@@ -2,27 +2,38 @@ var assert = require('assert');
 
 //test cases
 
-var users = {};
-function reset() {
-    users = {};
+class Hub {
+    constructor() {
+        this.users = {};
+    }
+    reset() {
+        this.users = {};
+    }
+    createUser(name) {
+        var user = new User(name,this);
+        this.users[name] = user;
+        return user;
+    }
+    send(op) {
+        p("doing",op);
+        Object.keys(this.users).forEach((id)=>{
+            if(op.user == id) return;
+            var user = this.users[id];
+            p("sending to " , user.id);
+            if(op.op == 'create') {
+                p("creating");
+                user.create(op.id,op.props,true);
+            }
+            if(op.op == 'set') {
+                p('setting',op.id, op.props);
+                user.getObject(op.id).setProps(op.props,true);
+            }
+        })
+    }
 }
 
-function send(op) {
-    //p("doing",op);
-    Object.keys(users).forEach((id)=>{
-        if(op.user == id) return;
-        var user = users[id];
-        //p("sending to " , user.id);
-        if(op.op == 'create') {
-            p("creating");
-            user.create(op.id,op.props,true);
-        }
-        if(op.op == 'set') {
-            p('setting',op.id, op.props);
-            user.getObject(op.id).setProps(op.props,true);
-        }
-    })
-}
+var hub = new Hub();
+
 
 function p() {
     console.log.apply(console,arguments);
@@ -55,8 +66,9 @@ class DataObject {
 }
 
 class User {
-    constructor(id) {
+    constructor(id, hub) {
         this.id = id;
+        this.hub = hub;
         this.objects = {};
         this.ops = [];
         this.pos = -1;
@@ -78,7 +90,7 @@ class User {
             props:props
         };
         this.addOp(op);
-        if(!remote) send(op);
+        if(!remote) this.hub.send(op);
         return obj;
     }
     getObject(id) {
@@ -108,40 +120,10 @@ class User {
     }
 }
 
-function createUser(name) {
-
-    var user = new User(name);
-    /*
-        undo:function() {
-            //p("the undo stack is",this.ops);
-            //p("index = ", this.undopos, this.ops.length);
-            var last = this.ops[this.undopos];
-            console.log("undoing",last);
-            if(last.op == 'set') {
-                this.getObject(last.id).setProps(last.rprops);
-            }
-            this.undopos -= 2;
-        },
-        redo:function() {
-            p("the undo stack is",this.ops);
-            p("redoing index = ", this.undopos, this.ops.length);
-            //this.undopos += 1;
-            var last = this.ops[this.undopos];
-            //console.log("redoing",last);
-            if(last.op == 'set') {
-                this.getObject(last.id).setProps(last.props);
-            }
-            //this.undopos -= 2;
-        }
-    };*/
-
-    users[name] = user;
-    return user;
-}
 var tests = {
     _test_create_object_raw: function() {
-        reset();
-        var a = createUser('a');
+        hub.reset();
+        var a = hub.createUser('a');
         a.create('foo', {x:0, y:0, w: 100, h: 100, fill:'red', type:'rect'});
         a.getObject('foo').setProps({x:100});
         a.getObject('foo').setProps({y:100});
@@ -149,8 +131,8 @@ var tests = {
         assert.equal(a.getObject('foo').getProp('y'),100);
     },
     _test_create_rect_raw: function() {
-        reset();
-        var a = createUser('a');
+        hub.reset();
+        var a = hub.createUser('a');
         a.create('doc', {});
         a.create('foo', {x:50, y:50});
         a.getObject('doc').setProps({0:'foo'});
@@ -168,8 +150,8 @@ var tests = {
         assert(get('foo','x'),100); //this won't work yet. need a conflict resolution
     },
     _test_undo_raw: function() {
-        reset();
-        var a = createUser('a');
+        hub.reset();
+        var a = hub.createUser('a');
         var doc = a.create('doc',{});
         var foo = a.create('foo',{x:50,y:50});
         doc.setProps({0:'foo'});
@@ -179,8 +161,8 @@ var tests = {
         assert.equal(a.getObject('foo').getProp('x'),100);
     },
     _test_undo_redo_raw: function() {
-        reset();
-        var a = createUser('a');
+        hub.reset();
+        var a = hub.createUser('a');
         var doc = a.create('doc',{});
         var foo = a.create('foo',{x:50,y:50});
         doc.setProps({0:'foo'});
@@ -212,9 +194,9 @@ var tests = {
     },
 
     _test_create_rect_api: function() {
-        reset();
-        var a = createUser('a');
-        var b = createUser('b');
+        hub.reset();
+        var a = hub.createUser('a');
+        var b = hub.createUser('b');
         var doc  = a.create('doc', {type:'model'});
         var rect = a.create('foo', {type:'rect',x:50, y:0});
         doc.setProps({0:rect.id});
@@ -225,9 +207,9 @@ var tests = {
     },
 
     _test_undo_rect_move_api: function() {
-        reset();
-        var a = createUser('a');
-        var b = createUser('b');
+        hub.reset();
+        var a = hub.createUser('a');
+        var b = hub.createUser('b');
         var doc  = a.create('doc', {type:'model'});
         var rect = a.create('foo', {type:'rect',x:0, y:0});
         doc.setProps({0:'foo'});
