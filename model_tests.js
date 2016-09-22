@@ -15,18 +15,21 @@ class Hub {
         return user;
     }
     send(op) {
-        p("doing",op);
         Object.keys(this.users).forEach((id)=>{
             if(op.user == id) return;
             var user = this.users[id];
-            p("sending to " , user.id);
             if(op.op == 'create') {
-                p("creating");
+                p("remote creating",id, op.id);
                 user.create(op.id,op.props,true);
             }
             if(op.op == 'set') {
-                p('setting',op.id, op.props);
-                user.getObject(op.id).setProps(op.props,true);
+                p('remote setting',id, op.id, op.props);
+                user.setProps(op.id,op.props,true);
+                //user.getObject(op.id).setProps(op.props,true);
+            }
+            if(op.op == 'delete') {
+                p('remote deleting',id, op.id);
+                user.delete(op.id,true);
             }
         })
     }
@@ -39,26 +42,18 @@ function p() {
     console.log.apply(console,arguments);
 }
 
+function clone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+}
+
 class DataObject {
     constructor(id, props, owner) {
         this.id = id;
-        this.props = props || {};
+        this.props = clone(props) || {};
         this.owner = owner;
     }
-    setProps(props,remote,undone) {
-        var rprops = {};
-        Object.keys(props).forEach((name)=>{
-            rprops[name] = this.props[name];
-            this.props[name] = props[name];
-        });
-        var op = {
-            user:this.owner.id,
-            op:'set',
-            id:this.id,
-            props:props,
-            rprops:rprops
-        };
-        if(!undone) this.owner.addOp(op);
+    setProps(props) {
+        this.owner.setProps(this.id,props);
     }
     getProp(id) {
         return this.props[id];
@@ -74,49 +69,77 @@ class User {
         this.pos = -1;
     }
     addOp(op) {
-        p("user",this.id,'adding op',op.props);
         this.ops.push(op);
         this.pos = this.ops.length-1;
-        console.log("ops length = ", this.ops.length)
     }
     create(id,props, remote) {
-        p("creating object",id,'with props',props);
         var obj = new DataObject(id,props,this);
         this.objects[id] = obj;
         var op = {
             user:this.id,
             op:'create',
             id:id,
-            props:props
+            props:clone(props)
         };
         this.addOp(op);
         if(!remote) this.hub.send(op);
         return obj;
     }
+    setProps(id, props, remote, undone) {
+        var rprops = {};
+        var obj = this.getObject(id);
+        Object.keys(props).forEach((name)=>{
+            rprops[name] = obj.props[name];
+            obj.props[name] = props[name];
+        });
+        var op = {
+            user:this.id,
+            op:'set',
+            id:id,
+            props:clone(props),
+            rprops:clone(rprops)
+        };
+        if(!remote) {
+            if(!undone) this.addOp(op);
+            this.hub.send(op);
+        }
+    }
+    hasObject(id) {
+        if(typeof this.objects[id] == 'undefined') return false;
+        if(this.objects[id] == null) return false;
+        return true;
+    }
     getObject(id) {
         if(!this.objects[id]) throw Error("No such object: " + id);
         return this.objects[id];
     }
+    delete(id,remote) {
+        var obj = this.getObject(id);
+        delete this.objects[id];
+        var op = {
+            user:this.id,
+            op:'delete',
+            id:id
+        };
+        if(!remote) this.hub.send(op);
+    }
     undo() {
+        console.log("undoing. ops list is", this.ops);
         var op = this.ops[this.pos];
-        p("undoing op",op);
         if(op.op == 'set') {
-            this.getObject(op.id).setProps(op.rprops,false,true);
+            this.setProps(op.id,op.rprops,false,true);
         }
         this.pos--;
     }
     redo() {
         this.pos++;
         var op = this.ops[this.pos];
-        p("redoing op",op);
         if(op.op == 'set') {
-            this.getObject(op.id).setProps(op.props,false,true);
+            this.setProps(op.id,op.props,false,true);
         }
     }
     hasRedo() {
-        p("len = ", this.ops.length, "pos",this.pos);
         return (this.ops.length-1 > this.pos);
-        //return false;
     }
 }
 
@@ -139,24 +162,34 @@ var tests = {
         assert.equal(a.getObject('doc').getProp(0),'foo');
         assert.equal(a.getObject('foo').getProp('x'),50);
     },
-    test_resolve_conflict_raw: function() {
-        //alice's actions arrive out of order
-        send({op:'create', id:'doc', props:{}});
-        send({op:'create', id:'foo', props:{x:50, y:50}});
-        send({op:'set',    id:'doc', props:{0:'foo'}});
-        send({op:'set',    id:'foo', props:{x:100}});
-        send({op:'set',    id:'foo', props:{x:75}});
-        resolve();
-        assert(get('foo','x'),100); //this won't work yet. need a conflict resolution
+    _test_delete_rect: function() {
+        hub.reset();
+        var a = hub.createUser('a');
+        var foo = a.create('foo',{x:50, y:50});
+        foo.setProps({x:100});
+        a.delete('foo');
+        assert.equal(a.hasObject('foo'),false);
+    },
+    _test_sync_objects:function() {
+        hub.reset();
+        var a = hub.createUser('a');
+        var b = hub.createUser('b');
+        a.create('foo',{x:50,y:50});
+        assert.equal(b.hasObject('foo'),true);
+        assert.equal(b.getObject('foo').getProp('x'),50);
+        a.getObject('foo').setProps({x:100});
+        assert.equal(b.getObject('foo').getProp('x'),100);
+        assert.equal(b.hasObject('foo'),true);
+        a.delete('foo');
+        assert.equal(b.hasObject('foo'),false);
     },
     _test_undo_raw: function() {
         hub.reset();
         var a = hub.createUser('a');
-        var doc = a.create('doc',{});
         var foo = a.create('foo',{x:50,y:50});
-        doc.setProps({0:'foo'});
         foo.setProps({x:100});
         foo.setProps({x:150});
+        assert.equal(a.getObject('foo').getProp('x'),150);
         a.undo();
         assert.equal(a.getObject('foo').getProp('x'),100);
     },
@@ -173,26 +206,6 @@ var tests = {
         a.redo();
         assert.equal(a.getObject('foo').getProp('x'),150);
     },
-    test_delete_set_conflict_raw: function() {
-        send({op:'create', id:'doc', props:{}});
-        send({op:'create', id:'foo', props:{x:50, y:50}});
-        send({op:'set',    id:'doc', props:{0:'foo'}});
-        send({op:'delete', id:'foo'});
-        send({op:'set',    id:'foo', props:{x:100}});
-        resolve();
-        assert(get('foo','x'),null);
-    },
-    test_double_create_conflict_raw: function() {
-        send({user:'a', op:'create', id:'doc', props:{}});
-        send({user:'a', op:'create', id:'foo', props:{x:50, y:50}});
-        send({user:'b', op:'create', id:'bar', props:{x:50, y:50}});
-        send({user:'a', op:'set',    id:'doc', props:{0:'foo'}});
-        send({user:'b', op:'set',    id:'doc', props:{0:'bar'}});
-        resolve();
-        assert(get('doc','0'),'foo');
-        assert(get('doc','1'),'bar');
-    },
-
     _test_create_rect_api: function() {
         hub.reset();
         var a = hub.createUser('a');
@@ -236,6 +249,52 @@ var tests = {
         assert.equal(a.hasRedo(),false);
         assert.equal(b.hasRedo(),false);
         assert.equal(b.getObject('foo').getProp('x'),200);
+    },
+
+    _test_reload_history_api: function() {
+        var a = hub.createUser('a');
+        var b = hub.createUser('b');
+        var doc  = a.create('doc', {type:'model'});
+        var rect = a.create('foo', {type:'rect',x:0, y:0});
+        doc.setProps({0:'foo'});
+        rect.setProps({x:25});
+        rect.setProps({x:50});
+        rect.setProps({x:100});
+        assert.equal(a.getObject("foo").getProp('x'),100);
+    },
+
+    test_resolve_conflict_raw: function() {
+        //alice's actions arrive out of order
+        send({op:'create', id:'doc', props:{}});
+        send({op:'create', id:'foo', props:{x:50, y:50}});
+        send({op:'set',    id:'doc', props:{0:'foo'}});
+        send({op:'set',    id:'foo', props:{x:100}});
+        send({op:'set',    id:'foo', props:{x:75}});
+        resolve();
+        assert(get('foo','x'),100); //this won't work yet. need a conflict resolution
+    },
+    test_set_after_delete: function() {
+        hub.reset();
+        var a = hub.createUser('a');
+        a.create('foo',{x:50,y:50});
+        a.delete('foo');
+        //send({op:'create', id:'doc', props:{}});
+        //send({op:'create', id:'foo', props:{x:50, y:50}});
+        //send({op:'set',    id:'doc', props:{0:'foo'}});
+        send({op:'delete', id:'foo'});
+        send({op:'set',    id:'foo', props:{x:100}});
+        resolve();
+        assert(get('foo','x'),null);
+    },
+    test_double_create_conflict_raw: function() {
+        send({user:'a', op:'create', id:'doc', props:{}});
+        send({user:'a', op:'create', id:'foo', props:{x:50, y:50}});
+        send({user:'b', op:'create', id:'bar', props:{x:50, y:50}});
+        send({user:'a', op:'set',    id:'doc', props:{0:'foo'}});
+        send({user:'b', op:'set',    id:'doc', props:{0:'bar'}});
+        resolve();
+        assert(get('doc','0'),'foo');
+        assert(get('doc','1'),'bar');
     },
 
     test_conflict_force_reload_api: function() {
@@ -330,6 +389,7 @@ var tests = {
 
 
 runTests(tests);
+//tests._test_sync_objects();
 
 
 function runTests(tests) {
