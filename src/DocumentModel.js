@@ -90,8 +90,14 @@ var DocumentModel = {
             },
             message: function(message) {
                 if(message.message.uuid == self.pubnub.getUUID()) return;
-                if(message.subscribedChannel == 'document') {
-                    self.processDocumentChange(message.message);
+                if(message.message.type == 'add') {
+                    self.processRemoteAdd(message.message);
+                }
+                if(message.message.type == 'delete') {
+                    self.processRemoteDelete(message.message);
+                }
+                if(message.message.type == 'change') {
+                    self.processRemoteChange(message.message);
                 }
             },
             presence: function(pres) {
@@ -103,11 +109,32 @@ var DocumentModel = {
         })
     },
 
-    processDocumentChange(msg) {
-        var node = this.model.find((o)=>o.name == msg.id);
+
+    processRemoteAdd(msg) {
+        this.model.push(msg.node);
+        this.listeners.forEach((cb)=>{cb()})
+    },
+    findLocalRect(node) {
+        return this.model.find((rect)=>rect.id==node.id);
+    },
+    removeLocalRect(node) {
+        var n = this.model.indexOf(node);
+        if(n >= 0) {
+            this.model.splice(n,1);
+        } else {
+            console.log("warning! node not found",node);
+        }
+    },
+    processRemoteDelete(msg) {
+        var rect = this.findLocalRect(msg.node);
+        this.removeLocalRect(rect);
+        this.listeners.forEach((cb)=>{cb()})
+    },
+    processRemoteChange(msg) {
+        var node = this.findLocalRect(msg.node);
         ['x','y','w','h'].forEach((prop)=>{
-            if(msg[prop]) {
-                node[prop] = msg[prop];
+            if(msg.node[prop]) {
+                node[prop] = msg.node[prop];
             }
         });
         this.listeners.forEach((cb)=>{cb()})
@@ -135,8 +162,23 @@ var DocumentModel = {
     },
     deleteSelection() {
         this.selected.forEach((rect)=>{
-            console.log("deleting",rect);
+            var n = this.model.indexOf(rect);
+            if(n >= 0) {
+                this.model.splice(n,1);
+            } else {
+                console.log("warning! node not found",rect);
+            }
+            this.pubnub.publish({
+                channel:'document',
+                message: {
+                    uuid: this.pubnub.getUUID(),
+                    type:'delete',
+                    node: rect
+                }
+            });
         });
+        this.selected = [];
+        this.listeners.forEach((cb)=>{cb()})
     },
     getSelectionProxy() {
         return new SelectionProxy(this.selected,this);
@@ -148,28 +190,31 @@ var DocumentModel = {
     //    obj[key] = val;
     //    this.listeners.forEach((cb)=>{cb()})
     //},
-    publish(model, props){
+    publishNodeChange(model, props){
         var payload = {};
-        payload.id = model.name;
-        payload.uuid = this.pubnub.getUUID();
         props.forEach((prop)=>{
             payload[prop] = model[prop]
         });
+        payload.id = model.id;
         this.pubnub.publish({
             channel:'document',
-            message: payload
+            message: {
+                uuid: this.pubnub.getUUID(),
+                type:'change',
+                node: payload
+            }
         });
         this.listeners.forEach((cb)=>{cb()})
     },
-    moved(model, diff) {
-        model.x += diff.x;
-        model.y += diff.y;
-        this.publish(model,['x','y']);
+    moved(node, diff) {
+        node.x += diff.x;
+        node.y += diff.y;
+        this.publishNodeChange(node,['x','y']);
     },
-    resized(model, diff) {
-        model.w += diff.x;
-        model.h += diff.y;
-        this.publish(model,['w','h']);
+    resized(node, diff) {
+        node.w += diff.x;
+        node.h += diff.y;
+        this.publishNodeChange(node,['w','h']);
     },
     getModel() {
         return this.model
@@ -189,11 +234,19 @@ var DocumentModel = {
     },
     addRect(rect) {
         this.model.push(rect);
+        this.pubnub.publish({
+            channel:'document',
+            message: {
+                uuid: this.pubnub.getUUID(),
+                type:'add',
+                node: rect
+            }
+        });
+
         this.listeners.forEach((cb)=>{cb()})
     }
 };
 
-DocumentModel.addRect(DocumentModel.createRect());
 
 DocumentModel.connect();
 
