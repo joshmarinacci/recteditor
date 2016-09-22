@@ -28,63 +28,108 @@ function p() {
     console.log.apply(console,arguments);
 }
 
-function createUser(name) {
-    var user = {
-        id:name,
-        objects:{},
-        ops:[],
-        create:function(id,props,stop) {
-            p("creating object",id,'with props',props);
-            var obj = {
-                id:id,
-                owner:this,
-                props:props||{},
-                setProps: function(props,stop) {
-                    var rprops = {};
-                    Object.keys(props).forEach((name)=>{
-                        //p("setting",name,props[name]);
-                        rprops[name] = this.props[name];
-                        this.props[name] = props[name];
-                    });
-                    var op = {
-                        user:this.owner.id,
-                        op:'set',
-                        id:this.id,
-                        props:props,
-                        rprops:rprops,
-                    };
-                    this.owner.ops.push(op);
-                    if(!stop) send(op);
-                },
-                getProp: function(id) {
-                    return this.props[id];
-                }
-            };
-            this.objects[id] = obj;
-            var op = {
-                user:this.id,
-                op:'create',
-                id:id,
-                props:props
-            };
-            this.ops.push(op);
-            if(!stop) send(op);
-            return obj;
-        },
-        getObject(id) {
-            if(!this.objects[id]) throw Error("No such object: " + id);
-            return this.objects[id];
-        },
-        undo:function() {
-            p("the undo stack is",this.ops);
-            var last = this.ops[this.ops.length-1];
-            p("last op is",last);
-            if(last.op == 'set') {
+class DataObject {
+    constructor(id, props, owner) {
+        this.id = id;
+        this.props = props || {};
+        this.owner = owner;
+    }
+    setProps(props,remote,undone) {
+        var rprops = {};
+        Object.keys(props).forEach((name)=>{
+            rprops[name] = this.props[name];
+            this.props[name] = props[name];
+        });
+        var op = {
+            user:this.owner.id,
+            op:'set',
+            id:this.id,
+            props:props,
+            rprops:rprops
+        };
+        if(!undone) this.owner.addOp(op);
+    }
+    getProp(id) {
+        return this.props[id];
+    }
+}
 
+class User {
+    constructor(id) {
+        this.id = id;
+        this.objects = {};
+        this.ops = [];
+        this.pos = -1;
+    }
+    addOp(op) {
+        p("user",this.id,'adding op',op);
+        this.ops.push(op);
+        this.pos += 1;
+        console.log("ops length = ", this.ops.length)
+    }
+    create(id,props, remote) {
+        p("creating object",id,'with props',props);
+        var obj = new DataObject(id,props,this);
+        this.objects[id] = obj;
+        var op = {
+            user:this.id,
+            op:'create',
+            id:id,
+            props:props
+        };
+        this.addOp(op);
+        if(!remote) send(op);
+        return obj;
+    }
+    getObject(id) {
+        if(!this.objects[id]) throw Error("No such object: " + id);
+        return this.objects[id];
+    }
+    undo() {
+        var op = this.ops[this.pos];
+        p("undoing op",op);
+        if(op.op == 'set') {
+            this.getObject(op.id).setProps(op.rprops,false,true);
+        }
+        this.pos--;
+    }
+    redo() {
+        this.pos++;
+        var op = this.ops[this.pos];
+        p("redoing op",op);
+        if(op.op == 'set') {
+            this.getObject(op.id).setProps(op.props,false,true);
+        }
+    }
+}
+
+function createUser(name) {
+
+    var user = new User(name);
+    /*
+        undo:function() {
+            //p("the undo stack is",this.ops);
+            //p("index = ", this.undopos, this.ops.length);
+            var last = this.ops[this.undopos];
+            console.log("undoing",last);
+            if(last.op == 'set') {
                 this.getObject(last.id).setProps(last.rprops);
             }
+            this.undopos -= 2;
+        },
+        redo:function() {
+            p("the undo stack is",this.ops);
+            p("redoing index = ", this.undopos, this.ops.length);
+            //this.undopos += 1;
+            var last = this.ops[this.undopos];
+            //console.log("redoing",last);
+            if(last.op == 'set') {
+                this.getObject(last.id).setProps(last.props);
+            }
+            //this.undopos -= 2;
         }
-    };
+    };*/
+
     users[name] = user;
     return user;
 }
@@ -176,14 +221,19 @@ var tests = {
         var doc  = a.create('doc', {type:'model'});
         var rect = a.create('foo', {type:'rect',x:0, y:0});
         doc.setProps({0:'foo'});
+        rect.setProps({x:25});
         rect.setProps({x:50});
         rect.setProps({x:100});
         assert.equal(b.getObject('foo').getProp('x'),100);
         a.undo();
-        assert.equal(rect.getProp('x'),50);
-        return;
+        assert.equal(b.getObject('foo').getProp('x'),50);
+        a.undo();
+        assert.equal(b.getObject('foo').getProp('x'),25);
         a.redo();
-        assert(rect.getProp('x'),100);
+        assert.equal(b.getObject('foo').getProp('x'),50);
+        a.redo();
+        assert.equal(b.getObject('foo').getProp('x'),100);
+        return;
         a.undo();
         assert(rect.getProp('x'),50);
         assert(a.hasRedo(),true);
@@ -286,7 +336,7 @@ var tests = {
 
 
 //runTests(tests);
-tests.test_create_rect_api();
+//tests.test_create_rect_api();
 tests.test_undo_rect_move_api();
 
 
