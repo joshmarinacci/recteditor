@@ -139,21 +139,23 @@ function createUser(name) {
     return user;
 }
 var tests = {
-    test_create_object_raw: function() {
+    _test_create_object_raw: function() {
         reset();
-        send({user:'a', op:'create',id:'foo', props:{ x:0, y:0, w:100, h:100, fill:'red', type:'rect'}});
-        send({user:'a', op:'set',id:'foo', props:{ x:100}});
-        send({user:'a', op:'set',id:'foo', props:{ y:100}});
-        assert(get('foo','x'),100);
-        assert(get('foo','y'),100);
+        var a = createUser('a');
+        a.create('foo', {x:0, y:0, w: 100, h: 100, fill:'red', type:'rect'});
+        a.getObject('foo').setProps({x:100});
+        a.getObject('foo').setProps({y:100});
+        assert.equal(a.getObject('foo').getProp('x'),100);
+        assert.equal(a.getObject('foo').getProp('y'),100);
     },
-    test_create_rect_raw: function() {
-        //test2 create rect in list of doc
-        send({op:'create', id:'doc', props:{}});
-        send({op:'create', id:'foo', props:{x:50, y:50}});
-        send({op:'set',    id:'doc', props:{0:'foo'}});
-        assert(get('doc','0'),'foo');
-        assert(get('foo','x'),50);
+    _test_create_rect_raw: function() {
+        reset();
+        var a = createUser('a');
+        a.create('doc', {});
+        a.create('foo', {x:50, y:50});
+        a.getObject('doc').setProps({0:'foo'});
+        assert.equal(a.getObject('doc').getProp(0),'foo');
+        assert.equal(a.getObject('foo').getProp('x'),50);
     },
     test_resolve_conflict_raw: function() {
         //alice's actions arrive out of order
@@ -165,26 +167,29 @@ var tests = {
         resolve();
         assert(get('foo','x'),100); //this won't work yet. need a conflict resolution
     },
-    test_undo_raw: function() {
-        send({op:'create', id:'doc', props:{}});
-        send({op:'create', id:'foo', props:{x:50, y:50}});
-        send({op:'set',    id:'doc', props:{0:'foo'}});
-        send({op:'set',    id:'foo', props:{x:100}});
-        send({op:'set',    id:'foo', props:{x:150}});
-        send({op:'set',    id:'foo', props:{x:100}}); //undo
-        resolve();
-        assert(get('foo','x'),100);
+    _test_undo_raw: function() {
+        reset();
+        var a = createUser('a');
+        var doc = a.create('doc',{});
+        var foo = a.create('foo',{x:50,y:50});
+        doc.setProps({0:'foo'});
+        foo.setProps({x:100});
+        foo.setProps({x:150});
+        a.undo();
+        assert.equal(a.getObject('foo').getProp('x'),100);
     },
-    test_undo_redo_raw: function() {
-        send({op:'create', id:'doc', props:{}});
-        send({op:'create', id:'foo', props:{x:50, y:50}});
-        send({op:'set',    id:'doc', props:{0:'foo'}});
-        send({op:'set',    id:'foo', props:{x:100}});
-        send({op:'set',    id:'foo', props:{x:150}});
-        send({op:'set',    id:'foo', props:{x:100}}); //undo
-        send({op:'set',    id:'foo', props:{x:150}}); //redo
-        resolve();
-        assert(get('foo','x'),150);
+    _test_undo_redo_raw: function() {
+        reset();
+        var a = createUser('a');
+        var doc = a.create('doc',{});
+        var foo = a.create('foo',{x:50,y:50});
+        doc.setProps({0:'foo'});
+        foo.setProps({x:100});
+        foo.setProps({x:150});
+        a.undo();
+        assert.equal(a.getObject('foo').getProp('x'),100);
+        a.redo();
+        assert.equal(a.getObject('foo').getProp('x'),150);
     },
     test_delete_set_conflict_raw: function() {
         send({op:'create', id:'doc', props:{}});
@@ -206,7 +211,7 @@ var tests = {
         assert(get('doc','1'),'bar');
     },
 
-    test_create_rect_api: function() {
+    _test_create_rect_api: function() {
         reset();
         var a = createUser('a');
         var b = createUser('b');
@@ -219,7 +224,7 @@ var tests = {
         assert.equal(b.getObject('doc').getProp('type'),'model');
     },
 
-    test_undo_rect_move_api: function() {
+    _test_undo_rect_move_api: function() {
         reset();
         var a = createUser('a');
         var b = createUser('b');
@@ -342,14 +347,14 @@ var tests = {
 }
 
 
-//runTests(tests);
-//tests.test_create_rect_api();
-tests.test_undo_rect_move_api();
+runTests(tests);
 
 
 function runTests(tests) {
     Object.keys(tests).forEach((name)=>{
-        console.log("running",name);
-        tests[name]();
+        if(name.indexOf('_')==0) {
+            console.log("running", name);
+            tests[name]();
+        }
     })
 }
