@@ -141,6 +141,8 @@ class User {
         this.pos = -1;
         this.reloaded = false;
         this.conflicted = false;
+        this.reloadFull();
+        this.reloaded = false;
     }
     addOp(op) {
         this.ops.push(op);
@@ -454,7 +456,17 @@ var tests = {
         a.reloadFull();
         assert.equal(a.getObject('foo').getProp('x'),100);
         //assert.equal(a.hasConflict(),false);
+    },
 
+    _test_user_joins_late: function() {
+        hub.reset();
+        var a = hub.createUser('a');
+        a.create('foo',{x:50});
+        a.getObject('foo').setProps({x:100});
+        a.getObject('foo').setProps({x:250,y:5});
+        var b = hub.createUser('b');
+        assert.equal(b.getObject('foo').getProp('x'),250);
+        assert.equal(b.getObject('foo').getProp('y'),5);
     },
 
     test_resolve_conflict_raw: function() {
