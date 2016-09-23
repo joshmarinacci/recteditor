@@ -1,15 +1,50 @@
 var assert = require('assert');
 
+/*
+
+possible conflicts
+
+* alice and bob set x to 50 & 100 at the same time. who wins. how to make sure
+they both end up the same. each gets response from the other side after their own change made.
+
+
+alice sets x=50
+bob sets x=100
+alice sends x=50
+bob sends x=100
+bob receives x=50
+alice receives x=100
+if time less than 1000 since last change of the prop, print conflict detected
+
+
+* alice deletes object before bob sets x=50 on it. either reorder or ignore the prop set
+
+* alice sets x, bob sets x, alice undoes x.  bob should have the original x now.
+
+* alice sets x, bob set x & y, alice undoes x. bob should have new y but original x now.
+
+
+
+
+
+
+
+ */
 //test cases
 
 class Hub {
     constructor() {
         this.users = {};
         this.history = [];
+        this.running = true;
+        this.timeAdvance = 0;
+        this.buffer = [];
     }
     reset() {
         this.users = {};
         this.history = [];
+        this.running = true;
+        this.buffer = [];
     }
     createUser(name) {
         var user = new User(name,this);
@@ -17,23 +52,20 @@ class Hub {
         return user;
     }
     send(op) {
+        if(!this.running) {
+            this.buffer.push(op);
+            return;
+        }
         this.history.push(op);
+        var time = new Date().getTime() + this.timeAdvance;
+        op.timestamp = time;
+        this.real_send(op);
+    }
+    real_send(op) {
         Object.keys(this.users).forEach((id)=>{
             if(op.user == id) return;
             var user = this.users[id];
-            if(op.op == 'create') {
-                p("remote creating",id, op.id);
-                user.create(op.id,op.props,true);
-            }
-            if(op.op == 'set') {
-                p('remote setting',id, op.id, op.props);
-                user.setProps(op.id,op.props,true);
-                //user.getObject(op.id).setProps(op.props,true);
-            }
-            if(op.op == 'delete') {
-                p('remote deleting',id, op.id);
-                user.delete(op.id,true);
-            }
+            user.handleRemoteOp(op);
         })
     }
     replayHistory(user) {
@@ -51,6 +83,22 @@ class Hub {
                 user.delete(op.id,true);
             }
         })
+    }
+    pause() {
+        this.running = false;
+        p("pausing");
+    }
+    timeForward(amt) {
+        this.timeAdvance += amt;
+        p("move time forward " + amt);
+    }
+    resume() {
+        p("resuming");
+        this.running = true;
+        this.buffer.forEach((op)=>{
+            op.timestamp = new Date().getTime() + this.timeAdvance;
+            this.real_send(op);
+        });
     }
 }
 
@@ -70,6 +118,7 @@ class DataObject {
         this.id = id;
         this.props = clone(props) || {};
         this.owner = owner;
+        this.times = {};
     }
     setProps(props) {
         this.owner.setProps(this.id,props);
@@ -87,6 +136,7 @@ class User {
         this.ops = [];
         this.pos = -1;
         this.reloaded = false;
+        this.conflicted = false;
     }
     addOp(op) {
         this.ops.push(op);
@@ -111,6 +161,7 @@ class User {
         Object.keys(props).forEach((name)=>{
             rprops[name] = obj.props[name];
             obj.props[name] = props[name];
+            obj.times[name] = new Date().getTime();
         });
         var op = {
             user:this.id,
@@ -123,6 +174,30 @@ class User {
             if(!undone) this.addOp(op);
             this.hub.send(op);
         }
+    }
+    handleRemoteOp(op) {
+        if(op.op == 'create') {
+            p("remote creating",this.id, op.id);
+            this.create(op.id,op.props,true);
+        }
+        if(op.op == 'set') {
+            p('remote setting',this.id, op.id, op.props);
+            var obj = this.getObject(op.id);
+            Object.keys(op.props).forEach((name)=>{
+                var diff = op.timestamp - obj.times[name];
+                //if less than 1000 ms, possible conflict
+                if(diff < 1000) {
+                    p("possible conflict on prop",name,"in object",op.id,"with user",this.id);
+                    this.conflicted = true;
+                }
+            });
+            this.setProps(op.id,op.props,true);
+        }
+        if(op.op == 'delete') {
+            p('remote deleting',this.id, op.id);
+            this.delete(op.id,true);
+        }
+
     }
     hasObject(id) {
         if(typeof this.objects[id] == 'undefined') return false;
@@ -169,6 +244,9 @@ class User {
         this.pos = -1;
         this.hub.replayHistory(this);
         this.reloaded = true;
+    }
+    hasConflict() {
+        return this.conflicted;
     }
 }
 
@@ -293,6 +371,46 @@ var tests = {
         a.reloadFull();
         assert.equal(a.getObject("foo").getProp('x'),100);
         assert.equal(a.didReload(),true);
+    },
+
+
+    _test_detect_property_set_conflict: function() {
+        hub.reset();
+        var a = hub.createUser('a');
+        var b = hub.createUser('b');
+        a.create('foo',{x:25});
+        hub.pause();
+        //a updates
+        a.getObject('foo').setProps({x:50});
+        //verify a is updated but b is not
+        assert.equal(a.getObject('foo').getProp('x'),50);
+        assert.equal(b.getObject('foo').getProp('x'),25);
+        //b updates
+        b.getObject('foo').setProps({x:100});
+        //verify b is updated but a is not
+        assert.equal(b.getObject('foo').getProp('x'),100);
+        assert.equal(a.getObject('foo').getProp('x'),50);
+        //no conflict yet
+        assert.equal(a.hasConflict(),false);
+        //go forward 100 msec
+        hub.timeForward(333);
+        hub.resume();
+        //now conflict should happen
+        assert.equal(a.hasConflict(),true);
+    },
+
+    _test_detect_property_set_no_conflict: function() {
+        hub.reset();
+        var a = hub.createUser('a');
+        var b = hub.createUser('b');
+        a.create('foo',{x:0});
+        hub.pause();
+        a.getObject('foo').setProps({x:50});
+        hub.timeForward(1000);
+        b.getObject('foo').setProps({x:100});
+        assert.equal(a.hasConflict(),false);
+        hub.resume();
+        assert.equal(a.hasConflict(),false);
     },
 
     test_resolve_conflict_raw: function() {
