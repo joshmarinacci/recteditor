@@ -166,6 +166,8 @@ class User {
             rprops[name] = obj.props[name];
             obj.props[name] = props[name];
             obj.times[name] = new Date().getTime();
+            //clear time to zero after a remote set
+            if(remote) obj.times[name] = 0;
         });
         var op = {
             user:this.id,
@@ -201,7 +203,6 @@ class User {
             p('remote deleting',this.id, op.id);
             this.delete(op.id,true);
         }
-
     }
     hasObject(id) {
         if(typeof this.objects[id] == 'undefined') return false;
@@ -419,7 +420,7 @@ var tests = {
 
     //the same user sending lots of updates shouldn't create a conflict,
     //only time since user set own property matters
-    test_same_user_set_property_no_conflict: function() {
+    _test_same_user_set_property_no_conflict: function() {
         hub.reset();
         var a = hub.createUser('a');
         var b = hub.createUser('b');

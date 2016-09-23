@@ -168,6 +168,15 @@ possible conflict. in this case, replay history and re-apply changes
 if change closer than N msec to the same object and property, then reload from
 history. history is always authoritative.
 
+detecting this change doesn't have to be done in all cases, however.
+if A changes x, then receives a change from B, check timestamps.
+if A receives a change from B, then receives another change from B, the timestamps don't matter.
+It only matters when a remote change is setting a property that was previously set locally.
+SOO we should set the timestamp when setting locally, compare with the remote, then set time to 0 after a remote change.
+so local + remote might conflict
+remote + remote will never conflict
+
+
 # user sets object deleted by other user
 * alice deletes id:foo
 * bob sets id:foo
