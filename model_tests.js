@@ -5,9 +5,11 @@ var assert = require('assert');
 class Hub {
     constructor() {
         this.users = {};
+        this.history = [];
     }
     reset() {
         this.users = {};
+        this.history = [];
     }
     createUser(name) {
         var user = new User(name,this);
@@ -15,6 +17,7 @@ class Hub {
         return user;
     }
     send(op) {
+        this.history.push(op);
         Object.keys(this.users).forEach((id)=>{
             if(op.user == id) return;
             var user = this.users[id];
@@ -29,6 +32,22 @@ class Hub {
             }
             if(op.op == 'delete') {
                 p('remote deleting',id, op.id);
+                user.delete(op.id,true);
+            }
+        })
+    }
+    replayHistory(user) {
+        this.history.forEach((op)=>{
+            if(op.op == 'create') {
+                p("replay creating",user.id, op.id);
+                user.create(op.id,op.props,true);
+            }
+            if(op.op == 'set') {
+                p('replay setting',user.id, op.id, op.props);
+                user.setProps(op.id,op.props,true);
+            }
+            if(op.op == 'delete') {
+                p('replay deleting',user.id, op.id);
                 user.delete(op.id,true);
             }
         })
@@ -67,6 +86,7 @@ class User {
         this.objects = {};
         this.ops = [];
         this.pos = -1;
+        this.reloaded = false;
     }
     addOp(op) {
         this.ops.push(op);
@@ -124,7 +144,6 @@ class User {
         if(!remote) this.hub.send(op);
     }
     undo() {
-        console.log("undoing. ops list is", this.ops);
         var op = this.ops[this.pos];
         if(op.op == 'set') {
             this.setProps(op.id,op.rprops,false,true);
@@ -140,6 +159,16 @@ class User {
     }
     hasRedo() {
         return (this.ops.length-1 > this.pos);
+    }
+    didReload() {
+        return this.reloaded;
+    }
+    reloadFull() {
+        this.objects = {};
+        this.ops = [];
+        this.pos = -1;
+        this.hub.replayHistory(this);
+        this.reloaded = true;
     }
 }
 
@@ -218,7 +247,6 @@ var tests = {
         assert.equal(a.getObject('foo').getProp('y'),0);
         assert.equal(b.getObject('doc').getProp('type'),'model');
     },
-
     _test_undo_rect_move_api: function() {
         hub.reset();
         var a = hub.createUser('a');
@@ -250,8 +278,8 @@ var tests = {
         assert.equal(b.hasRedo(),false);
         assert.equal(b.getObject('foo').getProp('x'),200);
     },
-
     _test_reload_history_api: function() {
+        hub.reset();
         var a = hub.createUser('a');
         var b = hub.createUser('b');
         var doc  = a.create('doc', {type:'model'});
@@ -261,6 +289,10 @@ var tests = {
         rect.setProps({x:50});
         rect.setProps({x:100});
         assert.equal(a.getObject("foo").getProp('x'),100);
+        assert.equal(a.didReload(),false);
+        a.reloadFull();
+        assert.equal(a.getObject("foo").getProp('x'),100);
+        assert.equal(a.didReload(),true);
     },
 
     test_resolve_conflict_raw: function() {
