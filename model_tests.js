@@ -16,6 +16,8 @@ bob receives x=50
 alice receives x=100
 if time less than 1000 since last change of the prop, print conflict detected
 
+to resolve the conflict, just reload from history
+
 
 * alice deletes object before bob sets x=50 on it. either reorder or ignore the prop set
 
