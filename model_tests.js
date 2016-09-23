@@ -469,6 +469,32 @@ var tests = {
         assert.equal(b.getObject('foo').getProp('y'),5);
     },
 
+    _test_long_disconnect: function() {
+        hub.reset();
+        var a = hub.createUser('a');
+        var b = hub.createUser('b');
+
+        //initial work
+        a.create('foo',{x:50});
+        b.getObject('foo').setProps({x:100});
+        assert.equal(a.getObject('foo').getProp('x'),100);
+
+        //disconnect
+
+        hub.pause();
+        b.getObject('foo').setProps({x:200,y:100});
+        b.create('bar',{x:100,y:100});
+        hub.timeForward(10*1000);
+        a.create('baz',{x:50,y:50});
+        a.getObject('foo').setProps({x:99});
+        hub.timeForward(10*1000);
+        hub.resume();
+        assert.equal(a.hasConflict(),true);
+
+
+
+    },
+
     test_resolve_conflict_raw: function() {
         //alice's actions arrive out of order
         send({op:'create', id:'doc', props:{}});
