@@ -46,6 +46,7 @@ class Hub {
         this.users = {};
         this.history = [];
         this.running = true;
+        this.timeAdvance = 0;
         this.buffer = [];
     }
     createUser(name) {
@@ -99,6 +100,7 @@ class Hub {
         this.running = true;
         this.buffer.forEach((op)=>{
             op.timestamp = new Date().getTime() + this.timeAdvance;
+            this.history.push(op);
             this.real_send(op);
         });
     }
@@ -183,7 +185,7 @@ class User {
             this.create(op.id,op.props,true);
         }
         if(op.op == 'set') {
-            p('remote setting',this.id, op.id, op.props);
+            p('remote setting',this.id, op.id, op.props, op.timestamp);
             var obj = this.getObject(op.id);
             Object.keys(op.props).forEach((name)=>{
                 var diff = op.timestamp - obj.times[name];
@@ -413,6 +415,45 @@ var tests = {
         assert.equal(a.hasConflict(),false);
         hub.resume();
         assert.equal(a.hasConflict(),false);
+    },
+
+    //the same user sending lots of updates shouldn't create a conflict,
+    //only time since user set own property matters
+    test_same_user_set_property_no_conflict: function() {
+        hub.reset();
+        var a = hub.createUser('a');
+        var b = hub.createUser('b');
+        a.create('foo',{x:0});
+        hub.pause();
+        a.getObject('foo').setProps({x:50});
+        hub.timeForward(100);
+        a.getObject('foo').setProps({x:50});
+        hub.timeForward(100);
+        assert.equal(a.hasConflict(),false);
+        assert.equal(b.hasConflict(),false);
+        hub.resume();
+        assert.equal(a.hasConflict(),false);
+        assert.equal(b.hasConflict(),false);
+    },
+
+    _test_resolve_by_reload: function() {
+        hub.reset();
+        var a = hub.createUser('a');
+        var b = hub.createUser('b');
+        a.create('foo',{x:0});
+        hub.pause();
+        a.getObject('foo').setProps({x:50});
+        hub.timeForward(100);
+        b.getObject('foo').setProps({x:100});
+        assert.equal(a.hasConflict(),false);
+        hub.resume();
+        assert.equal(a.hasConflict(),true);
+
+        //reload
+        a.reloadFull();
+        assert.equal(a.getObject('foo').getProp('x'),100);
+        //assert.equal(a.hasConflict(),false);
+
     },
 
     test_resolve_conflict_raw: function() {
