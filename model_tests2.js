@@ -66,7 +66,7 @@ class User {
         //replay history we missed
         var hist = this.network.fetchHistory();
         hist.forEach((action)=>{
-            console.log("replaying action",action);
+            console.log("replaying action",action.id, action.type);
             if(action.user == this.id) {
                 console.log("my own action, skipping");
                 return;
@@ -78,14 +78,21 @@ class User {
                 var obj = this.objects[action.obj];
                 obj.props[action.key] = action.value;
             }
+            if(action.type == 'delete') {
+                delete this.objects[action.obj];
+            }
         });
         console.log("connected now",this.id,'outbox = ', this.outbox);
         //send out pending actions from the outbox
         this.outbox.forEach((action)=>{
             console.log("sending out action",action);
+            //make sure it's still valid
+            if(action.type == 'change' && !this.hasObject(action.obj)) {
+                console.log("changing a deleted object. drop it");
+                return;
+            }
             this.network.broadcast(action,this);
         });
-
     }
     disconnect() {
         this.connected = false;
@@ -116,6 +123,13 @@ class User {
         this.undoindex = this.undostack.length-1;
         this.broadcast(clone(action));
     }
+    deleteObject(id) {
+        var action = {type:'delete',obj:id};
+        this.undostack.push(clone(action));
+        this.undoindex = this.undostack.length-1;
+        delete this.objects[action.obj];
+        this.broadcast(clone(action));
+    }
     hasUndo() {
         return (this.undoindex > 0);
     }
@@ -134,7 +148,14 @@ class User {
                 oldValue:action.value
             }
         }
-        throw new Error("can't invert action",action);
+        if(action.type == 'delete') {
+            return {
+                type:'create',
+                id:action.id+'_undone',
+                obj:action.obj
+            }
+        }
+        throw new Error(this.id + " can't invert action " + JSON.stringify(action));
     }
     undo() {
         var action = this.undostack[this.undoindex];
@@ -149,7 +170,13 @@ class User {
             this.undoindex = this.undoindex-1;
             return;
         }
-        throw new Error('cant handle action of type',action.type);
+        if(action.type == 'create') {
+            this.objects[action.obj] = new DataObject(action.obj, this);
+            this.broadcast(clone(action));
+            this.undoindex = this.undoindex-1;
+            return;
+        }
+        throw new Error(this.id + " can't handle action of type " + action.type);
     }
     redo() {
         var action = this.undostack[this.undoindex+1];
@@ -192,7 +219,8 @@ class User {
         }
         if(action.type == 'change') {
             var obj = this.objects[action.obj];
-            if(!this.hasObject(action.obj)) throw new Error("can't set property on unknown object");
+            if(!this.hasObject(action.obj))
+                throw new Error(this.id + ": can't set property on unknown object " + action.obj);
             obj.props[action.key] = action.value;
         }
     }
@@ -303,22 +331,27 @@ var tests = {
         B.getObject('obj1').setProp('a',44);
         //A deletes the object
         A.deleteObject('obj1');
-        assert.false(A.hasObject('obj1'));
+        assert(!A.hasObject('obj1'));
+        assert(B.hasObject('obj1'));
         //B reconnects
         B.connect();
         //B handles the conflict by dropping it's own change
-        assert.false(B.hasObject('obj1'));
+        assert(!B.hasObject('obj1'));
 
         //A undoes the delete
+        assert(!A.hasObject('obj1'));
+        assert(!B.hasObject('obj1'));
         A.undo();
         //B has the object back, but the change to 'a' was lost
-        assert.true(B.hasObject('obj1'));
+        assert(A.hasObject('obj1'));
+        assert(B.hasObject('obj1'));
         assert.equal(B.getObject('obj1').getProp('a',0));
 
 
-        //A and B are consistent
+        //A and B are consistent now
+        //assert.deepEqual(A.getObject('obj1'), B.getObject('obj1'));
 
-    },
+    }
 
 
 };
