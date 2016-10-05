@@ -112,11 +112,11 @@ class User {
         }
     }
     createObject(id) {
-        var action = {type:'create',obj:id};
-        this.undostack.push(clone(action));
+        var action = new CreateAction(id);
+        this.undostack.push(action);
         this.undoindex = this.undostack.length-1;
-        this.objects[id] = new DataObject(id, this);
-        this.broadcast(clone(action));
+        action.perform(this);
+        this.broadcast(action);
         return this.objects[id];
     }
     propChanged(object,key,value,oldValue) {
@@ -142,11 +142,9 @@ class User {
         console.log('inverting action',action);
         if(action.invert) return action.invert();
         if(action.type == 'delete') {
-            return {
-                type:'create',
-                id:action.id+'_undone',
-                obj:action.obj
-            }
+            var act = new CreateAction(action.obj);
+            act.id = action.id+'_undone';
+            return act;
         }
         throw new Error(this.id + " can't invert action " + JSON.stringify(action));
     }
@@ -157,12 +155,6 @@ class User {
         if(action.perform) {
             action.perform(this);
             this.broadcast(action);
-            this.undoindex = this.undoindex-1;
-            return;
-        }
-        if(action.type == 'create') {
-            this.objects[action.obj] = new DataObject(action.obj, this);
-            this.broadcast(clone(action));
             this.undoindex = this.undoindex-1;
             return;
         }
@@ -202,9 +194,6 @@ class User {
         }
         action = Actions.fromClone(action);
         console.log("got a network action", this.id);
-        if(action.type == 'create') {
-            this.objects[action.obj] = new DataObject(action.obj,this);
-        }
         if(action.perform) action.perform(this);
     }
     hasPendingChanges() {
@@ -221,7 +210,6 @@ class DataObject {
     }
     setProp(key,value) {
         var oldvalue = this.props[key];
-        console.log("setting",key,'from',oldvalue,'to',value);
         this.props[key] = value;
         this.user.propChanged(this,key,value,oldvalue);
         return this;
@@ -245,6 +233,13 @@ var Actions = {
             action.id = json.id;
             return action;
         }
+        if(json.type == 'create') {
+            var action = new CreateAction(json.obj);
+            action.user = json.user;
+            action.id = json.id;
+            return action;
+        }
+
         return json;
     }
 };
@@ -273,6 +268,18 @@ class ChangeAction extends Action {
         obj.props[this.key] = this.value;
     }
 }
+
+class CreateAction extends Action {
+    constructor(objid) {
+        super();
+        this.type = 'create';
+        this.obj = objid;
+    }
+    perform(user) {
+        user.objects[this.obj] = new DataObject(this.obj, user);
+    }
+}
+
 var hub = new Network();
 var tests = {
     complex_interaction: function() {
