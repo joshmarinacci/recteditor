@@ -26,12 +26,14 @@ class PresenceService {
         this.users = {};
         this.listeners = [];
         //connect to pubnub
-        options.pubnub.subscribe({
-            channels:[options.channel],
+        this.pubnub = options.pubnub;
+        this.channel = options.channel;
+        this.pubnub.subscribe({
+            channels:[this.channel],
             withPresence:true
         });
         var self = this;
-        options.pubnub.addListener({
+        this.pubnub.addListener({
             status: function(status) {
                 console.log("got status",status);
             },
@@ -39,7 +41,7 @@ class PresenceService {
                 console.log("got a message",message);
             },
             presence: function(pres) {
-                console.log("presence event",pres);
+                //console.log("presence event",pres);
                 if(pres.action === 'join')         return self.userJoined(pres);
                 if(pres.action === 'timeout')      return self.userLeft(pres);
                 if(pres.action === 'state-change') return self.stateChanged(pres);
@@ -103,6 +105,13 @@ class PresenceService {
 
     getUsers() {
         return Object.keys(this.users).map((key)=>this.users[key]);
+    }
+
+    setUserState(state) {
+        this.pubnub.setState({
+            state:state,
+            channels:[this.channel]
+        });
     }
 
 }

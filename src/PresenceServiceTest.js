@@ -35,37 +35,30 @@ class App extends Component {
             channel:CHANNEL
         });
         this.pres.onChange(()=> this.setState({users:this.pres.getUsers()}));
-
-/*        this.pubnub.addListener({
-            status: function(status) {
-                console.log("got status",status);
-            },
-            message: function(message) {
-                console.log("got a message",message);
-            },
-            presence: function(pres) {
-                console.log("got presence",pres);
-            }
-        });*/
-        this.pubnub.setState({
-            state:{
-                username:'random-username'+randi(0,100),
-                color:pick(COLORS)
-            },
-            channels:[CHANNEL]
+        this.pres.setUserState({
+            username:'random-username'+randi(0,100),
+            color:pick(COLORS)
         });
 
+    }
+    mouseMoved(evt) {
+        this.pres.setUserState({
+            cursorx: evt.clientX,
+            cursory: evt.clientY
+        });
     }
     render() {
         var users = this.state.users.map((user)=>{
             return <li key={user.uuid}>user {user.uuid} : {user.username} : {user.color} {(user.uuid == this.uuid)?"ME":""}</li>
         });
         var me = this.pres.getUserInfo(this.uuid);
-        console.log("me is",me);
+        var cursors = this.state.users.map((user) => {
+            return <div className="cursor" key={user.uuid}>{user.cursorx} - {user.cursory}</div>
+        });
         return <div className="fill hbox">
+            <div className="debug grow" onMouseMove={this.mouseMoved.bind(this)}>{cursors}</div>
             <div className="debug">me: {me.uuid} : {me.username} : {me.color}</div>
-            <ol className="debug grow">{users}</ol>
-            <div className="debug">cursors go here</div>
+            <ol className="debug">{users}</ol>
         </div>
     }
 }
