@@ -62,54 +62,31 @@ class User {
         this.actionCount = 0;
     }
     connect() {
-        console.log("connecting: " + this.id);
         this.connected = true;
 
         //replay history we missed
         var hist = this.network.fetchHistory();
         hist.forEach((action)=>{
-            console.log("replaying action",action.id, action.type);
-            if(action.user == this.id) {
-                console.log("my own action, skipping");
-                return;
-            }
-            if(action.type == 'create') {
-                this.objects[action.obj] = new DataObject(action.obj, this);
-            }
-            if(action.type == 'change') {
-                var obj = this.objects[action.obj];
-                obj.props[action.key] = action.value;
-            }
-            if(action.type == 'delete') {
-                delete this.objects[action.obj];
-            }
+            action = Actions.fromClone(action);
+            //skip own actions
+            if(action.user == this.id) return;
+            //perform the action locally
+            action.perform(this);
         });
-        console.log("connected now",this.id,'outbox = ', this.outbox);
         //send out pending actions from the outbox
         this.outbox.forEach((action)=>{
-            console.log("sending out action",action);
-            //make sure it's still valid
-            if(action.type == 'change' && !this.hasObject(action.obj)) {
-                console.log("changing a deleted object. drop it");
-                return;
-            }
-            this.network.broadcast(action,this);
+            //only send out valid actions
+            if(action.valid(this)) this.network.broadcast(action,this);
         });
     }
     disconnect() {
         this.connected = false;
-        console.log("disconnecting " + this.id);
     }
     broadcast(action) {
-        console.log("broadcasting",action);
         this.actionCount++;
         action.id = 'action_'+this.actionCount;
         this.outbox.push(action);
-        if(!this.connected) {
-            console.log("disconnected. can't broadcast");
-        } else {
-            this.network.broadcast(action,this);
-        }
+        if(this.connected) this.network.broadcast(action,this);
     }
     createObject(id) {
         var action = new CreateAction(id);
@@ -138,21 +115,14 @@ class User {
     hasRedo() {
         return this.undoindex < this.undostack.length -1;
     }
-    invertAction(action) {
-        console.log('inverting action',action);
-        return action.invert();
-    }
     undo() {
-        var action = this.undostack[this.undoindex];
-        action = this.invertAction(action);
-        console.log(this.id,"undoing",action);
+        var action = this.undostack[this.undoindex].invert();
         action.perform(this);
         this.broadcast(action);
         this.undoindex = this.undoindex-1;
     }
     redo() {
         var action = this.undostack[this.undoindex+1];
-        console.log(this.id,'redoing',action);
         action.perform(this);
         this.broadcast(action);
         this.undoindex = this.undoindex+1;
@@ -164,26 +134,23 @@ class User {
         return typeof this.objects[id] !== 'undefined';
     }
     removeFromOutbox(action) {
-        console.log(this.id,"clearing from outbox",action);
         var n = this.outbox.findIndex((a)=>a.id == action.id);
         if(n >= -1) {
             this.outbox.splice(n,1);
         } else {
-            throw new Error("counldn't find a match",action);
+            throw new Error("couldn't find a match",action);
         }
     }
     networkActionHappened(action) {
         if(!this.connected) return;
+        //if my action, remove from outbox, else perform it
         if(this.id == action.user) {
             this.removeFromOutbox(action);
-            return;
+        } else {
+            Actions.fromClone(action).perform(this);
         }
-        action = Actions.fromClone(action);
-        console.log("got a network action", this.id);
-        action.perform(this);
     }
     hasPendingChanges() {
-        console.log("outbox length = ", this.outbox.length)
         return this.outbox.length > 0
     }
 }
@@ -237,6 +204,7 @@ var Actions = {
 };
 
 class Action {
+    valid() { return true; }
 }
 
 class ChangeAction extends Action {
@@ -247,6 +215,13 @@ class ChangeAction extends Action {
         this.key = key;
         this.value = value;
         this.oldValue = oldValue;
+    }
+    valid(user) {
+        if(!user.hasObject(this.obj)) {
+            console.log("changing a deleted object. drop it");
+            return false;
+        }
+        return true;
     }
     invert() {
         var act = new ChangeAction(this.obj, this.key, this.oldValue, this.value);
@@ -387,6 +362,8 @@ var tests = {
         assert.equal(B.getObject('obj1').getProp('a',0));
 
 
+        //assert(!A.hasPendingChanges());
+        //assert(!B.hasPendingChanges());
         //A and B are consistent now
         //assert.deepEqual(A.getObject('obj1'), B.getObject('obj1'));
 
