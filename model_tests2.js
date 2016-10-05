@@ -62,6 +62,7 @@ class User {
         this.actionCount = 0;
     }
     connect() {
+        this.log('connecting');
         this.connected = true;
 
         //replay history we missed
@@ -74,12 +75,13 @@ class User {
             action.perform(this);
         });
         //send out pending actions from the outbox
-        this.outbox.forEach((action)=>{
-            //only send out valid actions
+        this.outbox.forEach((action) =>{
+            // only send out valid actions
             if(action.valid(this)) this.network.broadcast(action,this);
         });
     }
     disconnect() {
+        console.log(this.id,'disconnecting');
         this.connected = false;
     }
     broadcast(action) {
@@ -89,6 +91,7 @@ class User {
         if(this.connected) this.network.broadcast(action,this);
     }
     createObject(id) {
+        this.log('creating',id);
         var action = new CreateAction(id);
         this.undostack.push(action);
         this.undoindex = this.undostack.length-1;
@@ -97,12 +100,17 @@ class User {
         return this.objects[id];
     }
     propChanged(object,key,value,oldValue) {
+        this.log('changing',object.id+'.'+key,'=>',value);
         var action = new ChangeAction(object.id, key, value, oldValue);
         this.undostack.push(action);
         this.undoindex = this.undostack.length-1;
         this.broadcast(action);
     }
+    log() {
+        console.log(this.id+":",Array.prototype.slice.call(arguments).join(" "));
+    }
     deleteObject(id) {
+        this.log('deleting',id);
         var action = new DeleteAction(id);
         this.undostack.push(action);
         this.undoindex = this.undostack.length-1;
@@ -143,10 +151,13 @@ class User {
     }
     networkActionHappened(action) {
         if(!this.connected) return;
+        this.log("network action happened",action.id, action.user, this.outbox.length);
         //if my action, remove from outbox, else perform it
         if(this.id == action.user) {
+            this.log("mine, removing");
             this.removeFromOutbox(action);
         } else {
+            this.log("performing the action");
             Actions.fromClone(action).perform(this);
         }
     }
