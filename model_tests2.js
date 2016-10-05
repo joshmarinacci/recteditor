@@ -41,9 +41,7 @@ class Network {
         action.user = user.id;
         action = clone(action);
         this.history.push(action);
-        Object.keys(this.users).forEach((id)=>{
-            this.users[id].networkActionHappened(action);
-        })
+        Object.keys(this.users).forEach((id) => this.users[id].networkActionHappened(action));
     }
     fetchHistory() {
         return this.history;
@@ -60,6 +58,10 @@ class User {
         this.outbox = [];
         this.connected = false;
         this.actionCount = 0;
+    }
+    log() {
+        console.log(this.id+":",
+            Array.prototype.slice.call(arguments).join(" "));
     }
     connect() {
         this.log('connecting');
@@ -90,32 +92,22 @@ class User {
         this.outbox.push(action);
         if(this.connected) this.network.broadcast(action,this);
     }
+    performLocalAction(action) {
+        this.log("performing",action);
+        var retval = action.perform(this);
+        this.undostack.push(action);
+        this.undoindex = this.undostack.length-1;
+        this.broadcast(action);
+        return retval;
+    }
     createObject(id) {
-        this.log('creating',id);
-        var action = new CreateAction(id);
-        this.undostack.push(action);
-        this.undoindex = this.undostack.length-1;
-        action.perform(this);
-        this.broadcast(action);
-        return this.objects[id];
+        return this.performLocalAction(new CreateAction(id));
     }
-    propChanged(object,key,value,oldValue) {
-        this.log('changing',object.id+'.'+key,'=>',value);
-        var action = new ChangeAction(object.id, key, value, oldValue);
-        this.undostack.push(action);
-        this.undoindex = this.undostack.length-1;
-        this.broadcast(action);
-    }
-    log() {
-        console.log(this.id+":",Array.prototype.slice.call(arguments).join(" "));
+    propChanged(obj,key,val,old) {
+        return this.performLocalAction(new ChangeAction(obj.id, key, val, old));
     }
     deleteObject(id) {
-        this.log('deleting',id);
-        var action = new DeleteAction(id);
-        this.undostack.push(action);
-        this.undoindex = this.undostack.length-1;
-        action.perform(this);
-        this.broadcast(action);
+        return this.performLocalAction(new DeleteAction(id));
     }
     hasUndo() {
         return (this.undoindex > 0);
@@ -151,7 +143,7 @@ class User {
     }
     networkActionHappened(action) {
         if(!this.connected) return;
-        this.log("network action happened",action.id, action.user, this.outbox.length);
+        this.log("network action happened",action.id, action.user, action.type, action.obj);
         //if my action, remove from outbox, else perform it
         if(this.id == action.user) {
             this.log("mine, removing");
@@ -172,10 +164,9 @@ class DataObject {
         this.props = {};
         this.user = user;
     }
-    setProp(key,value) {
-        var oldvalue = this.props[key];
-        this.props[key] = value;
-        this.user.propChanged(this,key,value,oldvalue);
+    setProp(key,val) {
+        var old = this.props[key];
+        this.user.propChanged(this,key,val,old);
         return this;
     }
     getProp(key) {
@@ -191,26 +182,13 @@ class DataObject {
 
 var Actions = {
     fromClone(json) {
-        if(json.type == 'change') {
-            var action = new ChangeAction(json.obj,json.key,json.value,json.oldValue);
-            action.user = json.user;
-            action.id = json.id;
-            return action;
-        }
-        if(json.type == 'create') {
-            var action = new CreateAction(json.obj);
-            action.user = json.user;
-            action.id = json.id;
-            return action;
-        }
-        if(json.type == 'delete') {
-            var action = new DeleteAction(json.obj);
-            action.user = json.user;
-            action.id = json.id;
-            return action;
-        }
-
-        return json;
+        var action = null;
+        if(json.type == 'change') action = new ChangeAction(json.obj,json.key,json.value,json.oldValue);
+        if(json.type == 'create') action = new CreateAction(json.obj);
+        if(json.type == 'delete') action = new DeleteAction(json.obj);
+        action.user = json.user;
+        action.id = json.id;
+        return action;
     }
 };
 
@@ -226,6 +204,9 @@ class ChangeAction extends Action {
         this.key = key;
         this.value = value;
         this.oldValue = oldValue;
+    }
+    toString() {
+        return "change " + this.obj+"."+this.key + " => " + this.value;
     }
     valid(user) {
         if(!user.hasObject(this.obj)) {
@@ -253,6 +234,9 @@ class CreateAction extends Action {
         this.type = 'create';
         this.obj = objid;
     }
+    toString() {
+        return "create " + this.obj;
+    }
     invert() {
         var act = new DeleteAction(this.obj);
         act.id = this.id+'_undone';
@@ -260,6 +244,7 @@ class CreateAction extends Action {
     }
     perform(user) {
         user.objects[this.obj] = new DataObject(this.obj, user);
+        return user.objects[this.obj];
     }
 }
 
@@ -268,6 +253,9 @@ class DeleteAction extends Action {
         super();
         this.type = 'delete';
         this.obj = objid;
+    }
+    toString() {
+        return "delete " + this.obj;
     }
     invert() {
         var act = new CreateAction(this.obj);
