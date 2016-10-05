@@ -81,7 +81,7 @@ class User {
         });
     }
     disconnect() {
-        console.log(this.id,'disconnecting');
+        this.log('disconnecting');
         this.connected = false;
     }
     broadcast(action) {
