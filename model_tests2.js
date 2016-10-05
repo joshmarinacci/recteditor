@@ -39,6 +39,7 @@ class Network {
     }
     broadcast(action, user) {
         action.user = user.id;
+        action = clone(action);
         this.history.push(action);
         Object.keys(this.users).forEach((id)=>{
             this.users[id].networkActionHappened(action);
@@ -63,6 +64,7 @@ class User {
     connect() {
         console.log("connecting: " + this.id);
         this.connected = true;
+
         //replay history we missed
         var hist = this.network.fetchHistory();
         hist.forEach((action)=>{
@@ -118,10 +120,10 @@ class User {
         return this.objects[id];
     }
     propChanged(object,key,value,oldValue) {
-        var action = {type:'change',obj:object.id,key:key,value:value, oldValue:oldValue};
-        this.undostack.push(clone(action));
+        var action = new ChangeAction(object.id, key, value, oldValue);
+        this.undostack.push(action);
         this.undoindex = this.undostack.length-1;
-        this.broadcast(clone(action));
+        this.broadcast(action);
     }
     deleteObject(id) {
         var action = {type:'delete',obj:id};
@@ -138,16 +140,7 @@ class User {
     }
     invertAction(action) {
         console.log('inverting action',action);
-        if(action.type == 'change') {
-            return {
-                type:'change',
-                id:action.id+'_undone',
-                obj:action.obj,
-                key:action.key,
-                value:action.oldValue,
-                oldValue:action.value
-            }
-        }
+        if(action.invert) return action.invert();
         if(action.type == 'delete') {
             return {
                 type:'create',
@@ -161,12 +154,9 @@ class User {
         var action = this.undostack[this.undoindex];
         action = this.invertAction(action);
         console.log(this.id,"undoing",action);
-        if(action.type == 'change') {
-            var obj = this.objects[action.obj];
-            if(!this.hasObject(action.obj))
-                throw new Error("can't set property on unknown object");
-            obj.props[action.key] = action.value;
-            this.broadcast(clone(action));
+        if(action.perform) {
+            action.perform(this);
+            this.broadcast(action);
             this.undoindex = this.undoindex-1;
             return;
         }
@@ -181,12 +171,9 @@ class User {
     redo() {
         var action = this.undostack[this.undoindex+1];
         console.log(this.id,'redoing',action);
-        if(action.type == 'change') {
-            var obj = this.objects[action.obj];
-            if(!this.hasObject(action.obj))
-                throw new Error("can't set property on unknown object");
-            obj.props[action.key] = action.value;
-            this.broadcast(clone(action));
+        if(action.perform) {
+            action.perform(this);
+            this.broadcast(action);
             this.undoindex = this.undoindex+1;
             return;
         }
@@ -213,16 +200,12 @@ class User {
             this.removeFromOutbox(action);
             return;
         }
+        action = Actions.fromClone(action);
         console.log("got a network action", this.id);
         if(action.type == 'create') {
             this.objects[action.obj] = new DataObject(action.obj,this);
         }
-        if(action.type == 'change') {
-            var obj = this.objects[action.obj];
-            if(!this.hasObject(action.obj))
-                throw new Error(this.id + ": can't set property on unknown object " + action.obj);
-            obj.props[action.key] = action.value;
-        }
+        if(action.perform) action.perform(this);
     }
     hasPendingChanges() {
         console.log("outbox length = ", this.outbox.length)
@@ -254,6 +237,42 @@ class DataObject {
     }
 }
 
+var Actions = {
+    fromClone(json) {
+        if(json.type == 'change') {
+            var action = new ChangeAction(json.obj,json.key,json.value,json.oldValue);
+            action.user = json.user;
+            action.id = json.id;
+            return action;
+        }
+        return json;
+    }
+};
+
+class Action {
+}
+
+class ChangeAction extends Action {
+    constructor(objid, key, value, oldValue) {
+        super();
+        this.type = 'change';
+        this.obj = objid;
+        this.key = key;
+        this.value = value;
+        this.oldValue = oldValue;
+    }
+    invert() {
+        var act = new ChangeAction(this.obj, this.key, this.oldValue, this.value);
+        act.id = this.id+'_undone';
+        return act;
+    }
+    perform(user) {
+        var obj = user.objects[this.obj];
+        if(!user.hasObject(this.obj))
+            throw new Error("can't set property on unknown object");
+        obj.props[this.key] = this.value;
+    }
+}
 var hub = new Network();
 var tests = {
     complex_interaction: function() {
