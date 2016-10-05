@@ -126,11 +126,11 @@ class User {
         this.broadcast(action);
     }
     deleteObject(id) {
-        var action = {type:'delete',obj:id};
-        this.undostack.push(clone(action));
+        var action = new DeleteAction(id);
+        this.undostack.push(action);
         this.undoindex = this.undostack.length-1;
-        delete this.objects[action.obj];
-        this.broadcast(clone(action));
+        action.perform(this);
+        this.broadcast(action);
     }
     hasUndo() {
         return (this.undoindex > 0);
@@ -140,36 +140,22 @@ class User {
     }
     invertAction(action) {
         console.log('inverting action',action);
-        if(action.invert) return action.invert();
-        if(action.type == 'delete') {
-            var act = new CreateAction(action.obj);
-            act.id = action.id+'_undone';
-            return act;
-        }
-        throw new Error(this.id + " can't invert action " + JSON.stringify(action));
+        return action.invert();
     }
     undo() {
         var action = this.undostack[this.undoindex];
         action = this.invertAction(action);
         console.log(this.id,"undoing",action);
-        if(action.perform) {
-            action.perform(this);
-            this.broadcast(action);
-            this.undoindex = this.undoindex-1;
-            return;
-        }
-        throw new Error(this.id + " can't handle action of type " + action.type);
+        action.perform(this);
+        this.broadcast(action);
+        this.undoindex = this.undoindex-1;
     }
     redo() {
         var action = this.undostack[this.undoindex+1];
         console.log(this.id,'redoing',action);
-        if(action.perform) {
-            action.perform(this);
-            this.broadcast(action);
-            this.undoindex = this.undoindex+1;
-            return;
-        }
-        throw new Error('cant handle action of type',action.type);
+        action.perform(this);
+        this.broadcast(action);
+        this.undoindex = this.undoindex+1;
     }
     getObject(id) {
         return this.objects[id];
@@ -194,7 +180,7 @@ class User {
         }
         action = Actions.fromClone(action);
         console.log("got a network action", this.id);
-        if(action.perform) action.perform(this);
+        action.perform(this);
     }
     hasPendingChanges() {
         console.log("outbox length = ", this.outbox.length)
@@ -239,6 +225,12 @@ var Actions = {
             action.id = json.id;
             return action;
         }
+        if(json.type == 'delete') {
+            var action = new DeleteAction(json.obj);
+            action.user = json.user;
+            action.id = json.id;
+            return action;
+        }
 
         return json;
     }
@@ -275,8 +267,29 @@ class CreateAction extends Action {
         this.type = 'create';
         this.obj = objid;
     }
+    invert() {
+        var act = new DeleteAction(this.obj);
+        act.id = this.id+'_undone';
+        return act;
+    }
     perform(user) {
         user.objects[this.obj] = new DataObject(this.obj, user);
+    }
+}
+
+class DeleteAction extends Action {
+    constructor(objid) {
+        super();
+        this.type = 'delete';
+        this.obj = objid;
+    }
+    invert() {
+        var act = new CreateAction(this.obj);
+        act.id = this.id+'_undone';
+        return act;
+    }
+    perform(user) {
+        delete user.objects[this.obj];
     }
 }
 
