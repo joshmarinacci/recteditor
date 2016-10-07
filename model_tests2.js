@@ -70,7 +70,6 @@ class Network {
     reset() {
         this.count = 0;
         this.users = {};
-        this.history = [];
     }
     createUser(id) {
         return (this.users[id] = new User(id,this));
@@ -80,7 +79,6 @@ class Network {
         action = clone(action);
         this.count++;
         action.networkcount = this.count;
-        this.history.push(action);
         console.log("-- published ", action.type, action.count, action.networkcount);
         this.pubnub.publish({
             channel:CHANNEL_NAME,
@@ -88,7 +86,18 @@ class Network {
         })
     }
     fetchHistory() {
-        return this.history;
+        return new Promise((res,rej)=>{
+            this.pubnub.history({
+                channel: CHANNEL_NAME,
+                reverse: false,
+                count: 10,
+                includeTimetoken: true
+            },
+             (status,results)=>{
+                 res(results);
+             }
+            );
+        });
     }
 }
 class User {
@@ -112,45 +121,30 @@ class User {
         this.connected = true;
 
         //replay history we missed
-        var hist = this.network.fetchHistory();
-        hist.forEach((action)=>{
-            action = Actions.fromClone(action);
-            //skip own actions
-            if(action.user == this.id) return;
-            //perform the action locally
-            action.perform(this);
-        });
-        this.sendOutbox();
+        this.network.fetchHistory().then((hist)=>{
+            //console.log("got the history",hist.messages.slice(-5));
+            hist.messages.forEach((json)=>{
+                //console.log(json);
+                var action = Actions.fromClone(json.entry);
+                if(json.entry.user == this.id) {
+                    //console.log("my own action response. skip");
+                    return;
+                }
+                console.log("import",action.type, action.user, action.count);
+                //do the action if it is valid
+                if(action.valid(this))  action.perform(this);
+            });
+        }).catch((e)=>console.log(e));
     }
     disconnect() {
         this.log('disconnecting');
         this.connected = false;
     }
-    /*
-     when action comes in, put it into the undostack
-     if connected and the outbox is empty, send it
-     else, add to the outbox
-
-     when three in a row happen,
-     add all three to the outbox
-     only the first one is sent
-     later receive from the network
-     remove received message from the outbox
-     if outbox not empty, send the first one in the outbox
-
-     if disconnected, then they just pile up in the outbox
-     when reconnecting, purge the outbox one at a time.
-
-     */
     sendOutbox() {
         if(!this.connected) return;
         if(this.outbox.length <= 0) return;
         var action = this.outbox[0];
-        console.log("now len = ", this.outbox.length);
-        if(action.sent === true) {
-            console.log("already sent. don't send again");
-            return;
-        }
+        if(action.sent === true) return;
         action.sent = true;
         // only send out valid actions
         if(action.valid(this)) this.network.broadcast(action,this);
@@ -278,6 +272,8 @@ var Actions = {
         if(json.type == 'delete') action = new DeleteAction(json.obj);
         action.user = json.user;
         action.id = json.id;
+        action.count = json.count;
+        action.networkcount = json.networkcount;
         return action;
     }
 };
@@ -482,7 +478,6 @@ test('simple test', (t)=>{
     wait(1000)
         .then(()=>{
             A.connect();
-            B.connect();
             t.ok(!A.hasPendingChanges());
             t.ok(!A.hasUndo());
             A.createObject('obj1').setProps({foo:'bar',a:0}).setProp('a',9);
@@ -491,10 +486,12 @@ test('simple test', (t)=>{
         })
         .then(()=>wait(2000))
         .then(()=>{
-            //t.ok(B.hasObject('foo'),'B got the matching object');
-            t.end();
+            B.connect();
         })
+        .then(()=>wait(2000))
         .then(()=>{
+            t.ok(B.hasObject('obj1'),'B got the matching object');
+            t.end();
             A.disconnect();
             B.disconnect();
             hub.shutdown().then(()=> process.exit(0));
