@@ -37,7 +37,7 @@ let test = require('tape');
 
 var pub_key = "pub-c-84cc1e5d-138c-4366-a642-f2f8c6d63fac";
 var sub_key = "sub-c-386922f6-6e17-11e6-91d9-02ee2ddab7fe";
-const CHANNEL_NAME = "my-cool-document";
+const CHANNEL_NAME = "my-cool-document-"+Math.floor(Math.random()*1000);
 
 
 class Network {
@@ -134,6 +134,9 @@ class User {
                 //do the action if it is valid
                 if(action.valid(this))  action.perform(this);
             });
+        }).then(()=>{
+            this.log("sending queued changes");
+            this.sendOutbox();
         }).catch((e)=>console.log(e));
     }
     disconnect() {
@@ -485,12 +488,53 @@ test('simple test', (t)=>{
             t.equal(A.getObject('obj1').getProp('a'),9);
         })
         .then(()=>wait(2000))
+        //B connects and gets history
         .then(()=>{
             B.connect();
         })
         .then(()=>wait(2000))
+        // verify B got the history okay
+        .then(()=> {
+            t.ok(B.hasObject('obj1'), 'B got the matching object');
+            t.equal(B.getObject('obj1').getProp('foo'), 'bar', "right property value");
+        })
+        // B does some work
         .then(()=>{
-            t.ok(B.hasObject('obj1'),'B got the matching object');
+            //B does some work
+            B.getObject('obj1').setProp('foo','baz');
+            t.equal(B.getObject('obj1').getProp('foo'),'baz',"local change");
+
+            //B does some more work
+            B.createObject('obj2').setProps({b:99});
+
+        })
+        .then(()=>wait(2000))
+        .then(()=>{
+            //verify that A got the changes too
+            t.equal(A.getObject('obj1').getProp('foo'),'baz',"remote change");
+            t.equal(A.getObject('obj2').getProp('b'),99);
+        })
+
+
+        // B does some work offline
+        .then(()=>{
+            B.disconnect();
+            t.ok(!B.hasPendingChanges(),'no pending changes');
+            B.getObject('obj1').setProp('x',50);
+            t.ok(B.hasPendingChanges(),'pending changes now');
+        })
+        .then(()=>wait(2000))
+        //B reconnects
+        .then(()=>{
+            B.connect();
+        })
+        .then(()=>wait(2000))
+        //verify that A got the changes
+        .then(()=>{
+            t.equal(A.getObject('obj1').getProp('x'),50,
+                'A got remote delayed change from B');
+        })
+        .then(()=>{
             t.end();
             A.disconnect();
             B.disconnect();
