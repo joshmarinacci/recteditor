@@ -1,13 +1,6 @@
 /**
  * Created by josh on 10/5/16.
  */
-/*
-new PresenceService({
-    pubnub:pubnub,
-    channel:'my-doc-1'
-});
-*/
-
 
 /*
 connects to a channel, for presence events
