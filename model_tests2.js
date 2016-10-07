@@ -1,4 +1,8 @@
 let assert = require('assert');
+let PubNub = require('pubnub');
+let test = require('tape');
+
+
 /**
  * Created by josh on 10/4/16.
  */
@@ -25,12 +29,46 @@ let assert = require('assert');
      when user's own event comes from the network, pull out of the outbox. process outbox.
 
 
+     how to handle missing message
+
+
      */
+
+
+var pub_key = "pub-c-84cc1e5d-138c-4366-a642-f2f8c6d63fac";
+var sub_key = "sub-c-386922f6-6e17-11e6-91d9-02ee2ddab7fe";
+const CHANNEL_NAME = "my-cool-document";
+
+
 class Network {
     constructor() {
         this.reset();
+        this.pubnub = new PubNub({
+            publishKey:pub_key,
+            subscribeKey:sub_key,
+        });
+        this.pubnub.addListener({
+            status:(e) => {
+                console.log("status changed",e);
+            },
+            message:(e) => {
+                console.log("message", e.message.type, e.message.count, e.message.networkcount);
+                var action = e.message;
+                Object.keys(this.users).forEach((id) => this.users[id].networkActionHappened(action));
+            },
+            presence:(e) => {
+                console.log("presence",e);
+            }
+        });
+
+        this.pubnub.subscribe({channels:[CHANNEL_NAME]});
+    }
+    shutdown() {
+        this.pubnub.unsubscribe({channels:[CHANNEL_NAME]});
+        return Promise.resolve();
     }
     reset() {
+        this.count = 0;
         this.users = {};
         this.history = [];
     }
@@ -40,14 +78,19 @@ class Network {
     broadcast(action, user) {
         action.user = user.id;
         action = clone(action);
+        this.count++;
+        action.networkcount = this.count;
         this.history.push(action);
-        Object.keys(this.users).forEach((id) => this.users[id].networkActionHappened(action));
+        console.log("-- published ", action.type, action.count, action.networkcount);
+        this.pubnub.publish({
+            channel:CHANNEL_NAME,
+            message:action,
+        })
     }
     fetchHistory() {
         return this.history;
     }
 }
-
 class User {
     constructor(id, network) {
         this.id = id;
@@ -58,9 +101,10 @@ class User {
         this.outbox = [];
         this.connected = false;
         this.actionCount = 0;
+        this.users = {};
     }
     log() {
-        console.log(this.id+":",
+        console.log("## " + this.id+":",
             Array.prototype.slice.call(arguments).join(" "));
     }
     connect() {
@@ -76,22 +120,49 @@ class User {
             //perform the action locally
             action.perform(this);
         });
-        //send out pending actions from the outbox
-        this.outbox.forEach((action) =>{
-            // only send out valid actions
-            if(action.valid(this)) this.network.broadcast(action,this);
-        });
+        this.sendOutbox();
     }
     disconnect() {
         this.log('disconnecting');
         this.connected = false;
     }
+    /*
+     when action comes in, put it into the undostack
+     if connected and the outbox is empty, send it
+     else, add to the outbox
+
+     when three in a row happen,
+     add all three to the outbox
+     only the first one is sent
+     later receive from the network
+     remove received message from the outbox
+     if outbox not empty, send the first one in the outbox
+
+     if disconnected, then they just pile up in the outbox
+     when reconnecting, purge the outbox one at a time.
+
+     */
+    sendOutbox() {
+        if(!this.connected) return;
+        if(this.outbox.length <= 0) return;
+        var action = this.outbox[0];
+        console.log("now len = ", this.outbox.length);
+        if(action.sent === true) {
+            console.log("already sent. don't send again");
+            return;
+        }
+        action.sent = true;
+        // only send out valid actions
+        if(action.valid(this)) this.network.broadcast(action,this);
+    }
     broadcast(action) {
         this.actionCount++;
         action.id = 'action_'+this.actionCount;
+        action.count = this.actionCount;
         this.outbox.push(action);
-        if(this.connected) this.network.broadcast(action,this);
+        this.sendOutbox();
     }
+
     performLocalAction(action) {
         this.log("performing",action);
         var retval = action.perform(this);
@@ -110,7 +181,7 @@ class User {
         return this.performLocalAction(new DeleteAction(id));
     }
     hasUndo() {
-        return (this.undoindex > 0);
+        return (this.undoindex >= 0);
     }
     hasRedo() {
         return this.undoindex < this.undostack.length -1;
@@ -141,16 +212,35 @@ class User {
             throw new Error("couldn't find a match",action);
         }
     }
+
+    getRemoteUserInfo(action) {
+        if(!this.users[action.user]) {
+            this.users[action.user] = {
+                id:action.user,
+                count:0
+            }
+        }
+        return this.users[action.user];
+    }
+
     networkActionHappened(action) {
         if(!this.connected) return;
-        this.log("network action happened",action.id, action.user, action.type, action.obj);
+        this.log("network action happened",action.type, action.user +'.'+ action.count, action.networkcount);
         //if my action, remove from outbox, else perform it
         if(this.id == action.user) {
             this.log("mine, removing");
             this.removeFromOutbox(action);
+            this.sendOutbox();
         } else {
             this.log("performing the action");
-            Actions.fromClone(action).perform(this);
+            var user = this.getRemoteUserInfo(action);
+            console.log("remote user is",user);
+            if(action.count < user.count) {
+                console.log("OUT OF ORDER");
+            }
+            user.count = action.count;
+            action = Actions.fromClone(action);
+            if(action.valid(this)) action.perform(this);
         }
     }
     hasPendingChanges() {
@@ -371,17 +461,46 @@ var tests = {
 
 };
 
-function runTests(tests) {
-    Object.keys(tests).forEach((name)=>{
-        //if(name.indexOf('_')==0) {
-            console.log("running", name);
-            tests[name]();
-        //}
-    })
-}
-runTests(tests);
-
 function clone(obj) {
     if(!obj) return {};
     return JSON.parse(JSON.stringify(obj));
 }
+
+function wait(time) {
+    return new Promise((res,rej)=>{
+        setTimeout(()=>{
+            res();
+        },time);
+    })
+}
+
+
+test('simple test', (t)=>{
+    hub.reset();
+    let A = hub.createUser('a');
+    let B = hub.createUser('b');
+    wait(1000)
+        .then(()=>{
+            A.connect();
+            B.connect();
+            t.ok(!A.hasPendingChanges());
+            t.ok(!A.hasUndo());
+            A.createObject('obj1').setProps({foo:'bar',a:0}).setProp('a',9);
+            t.ok(A.hasUndo());
+            t.equal(A.getObject('obj1').getProp('a'),9);
+        })
+        .then(()=>wait(2000))
+        .then(()=>{
+            //t.ok(B.hasObject('foo'),'B got the matching object');
+            t.end();
+        })
+        .then(()=>{
+            A.disconnect();
+            B.disconnect();
+            hub.shutdown().then(()=> process.exit(0));
+        })
+        .catch((e)=>{
+            console.log("error",e);
+        });
+    ;
+});
