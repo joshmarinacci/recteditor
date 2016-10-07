@@ -1,11 +1,15 @@
 import React, { Component } from 'react';
+import PubNub from "pubnub";
 import "./appy-style/layout.css";
 import "./appy-style/look.css";
 import "./index.css";
 import PropertySheet from "./PropertySheet";
 import SVGCanvas from "./SVGCanvas";
 import DocumentModel from "./DocumentModel"
-//import {log} from "./util";
+import PresenceService from './services/PresenceService';
+
+import {log, randi, pick, COLORS} from "./util";
+const CHANNEL = "my-doc-1";
 
 class UserList extends Component {
     render() {
@@ -24,8 +28,26 @@ class App extends Component {
         super(props);
         this.state = {
             model: null,
-            username: 'someuser'
+            username: 'someuser',
+            users:[]
         };
+        this.uuid = 'my_uuid'+Math.floor(Math.random()*1000);
+        this.pubnub = new PubNub({
+            publishKey:'pub-c-84cc1e5d-138c-4366-a642-f2f8c6d63fac',
+            subscribeKey:'sub-c-386922f6-6e17-11e6-91d9-02ee2ddab7fe',
+            uuid: this.uuid,
+            presenceTimeout: 30
+        });
+        this.pres = new PresenceService({
+            pubnub:this.pubnub,
+            channel:CHANNEL
+        });
+        this.pres.onChange(()=> this.setState({users:this.pres.getUsers()}));
+        this.pres.setUserState({
+            username:'random-username'+randi(0,100),
+            color:pick(COLORS)
+        });
+
         DocumentModel.onUpdate(()=> {
             this.setState({model:DocumentModel.getModel()});
         });
@@ -41,13 +63,15 @@ class App extends Component {
     editUsername() {
         this.setState({
             username: this.refs.username.value
-        })
+        });
     }
 
     editUsernameEnter(e) {
         if(e.keyCode === 13) {
             console.log("changing name to ", this.state.username);
-            DocumentModel.setUsername(this.state.username);
+            this.pres.setUserState({
+                username: this.state.username
+            });
         }
     }
 
@@ -61,7 +85,7 @@ class App extends Component {
                     <button>undo</button>
                     <button>redo</button>
                     <span className="grow"></span>
-                    <UserList users={DocumentModel.getUsers()}/>
+                    <UserList users={this.state.users}/>
                     <span className="grow"></span>
                     <input type="text" ref='username' value={this.state.username} onChange={this.editUsername.bind(this)} onKeyDown={this.editUsernameEnter.bind(this)}/>
                 </div>

@@ -12,7 +12,7 @@ sends change events when anything in the user's state changes
 
 
 demo shows cursors, list of users with their user names, random color chosen
- */
+*/
 
 class PresenceService {
     constructor(options) {

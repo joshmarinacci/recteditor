@@ -3,8 +3,6 @@ import PubNub from "pubnub";
  * Created by josh on 7/27/16.
  */
 
-const COLORS = ['red','blue','green','orange','yellow','purple','brown','lightBlue'];
-
 class SelectionProxy {
     constructor(nodes,model) {
         this.nodes = nodes;
@@ -72,16 +70,10 @@ class SelectionProxy {
     }
 }
 
-
-function pick(arr) {
-    return arr[Math.floor(Math.random()*arr.length)];
-}
-
 var DocumentModel = {
     selected: [],
     listeners: [],
     model: [],
-    users:{},
     fire: function() {
         this.listeners.forEach((cb)=>{cb()})
     },
@@ -109,62 +101,13 @@ var DocumentModel = {
                     self.processRemoteChange(message.message);
                 }
             },
-            presence: function(pres) {
-                console.log("got presence",pres);
-                if(pres.action == 'state-change') {
-                    console.log("it's state changing");
-                    self.users[pres.uuid] = {
-                        username:pres.state.username,
-                        color: pres.state.color
-                    };
-                    self.fire();
-                }
-                console.log("users are", self.users);
-            }
         });
         this.pubnub.subscribe({
             channels:['document'],
             withPresence:true
         });
-        this.users[this.pubnub.getUUID()] = {
-            username:'unnamed-user',
-            color: pick(COLORS),
-        };
-
-
-        setTimeout(()=> {
-            this.pubnub.hereNow({
-                channels:['document'],
-                includeUUIDs:true,
-                includeState:true
-            },function(status,resp){
-                console.log("herenow",status,resp);
-                var oc = resp.channels.document.occupants;
-                console.log("oc = ", oc);
-                oc.forEach((state)=>{
-                    console.log(state);
-                    if(state.state) {
-                        self.users[state.uuid] = state.state;
-                    }
-                })
-                self.fire();
-            });
-        },1000);
     },
 
-    getUsers() {
-        return this.users;
-    },
-
-    setUsername(username) {
-        this.pubnub.setState({
-            state:{
-                username:username,
-                color:this.users[this.pubnub.getUUID()].color
-            },
-            channels:['document']
-        })
-    },
 
     processRemoteAdd(msg) {
         this.model.push(msg.node);
