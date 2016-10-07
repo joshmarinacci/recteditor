@@ -90,7 +90,6 @@ class Network {
             this.pubnub.history({
                 channel: CHANNEL_NAME,
                 reverse: false,
-                count: 10,
                 includeTimetoken: true
             },
              (status,results)=>{
@@ -205,6 +204,7 @@ class User {
         var n = this.outbox.findIndex((a)=>a.id == action.id);
         if(n >= -1) {
             this.outbox.splice(n,1);
+            action.sent = false;
         } else {
             throw new Error("couldn't find a match",action);
         }
@@ -473,6 +473,7 @@ function wait(time) {
     })
 }
 
+var DELAY = 2000;
 
 test('simple test', (t)=>{
     hub.reset();
@@ -487,12 +488,12 @@ test('simple test', (t)=>{
             t.ok(A.hasUndo());
             t.equal(A.getObject('obj1').getProp('a'),9);
         })
-        .then(()=>wait(2000))
+        .then(()=>wait(DELAY))
         //B connects and gets history
         .then(()=>{
             B.connect();
         })
-        .then(()=>wait(2000))
+        .then(()=>wait(DELAY))
         // verify B got the history okay
         .then(()=> {
             t.ok(B.hasObject('obj1'), 'B got the matching object');
@@ -508,7 +509,7 @@ test('simple test', (t)=>{
             B.createObject('obj2').setProps({b:99});
 
         })
-        .then(()=>wait(2000))
+        .then(()=>wait(DELAY))
         .then(()=>{
             //verify that A got the changes too
             t.equal(A.getObject('obj1').getProp('foo'),'baz',"remote change");
@@ -523,17 +524,92 @@ test('simple test', (t)=>{
             B.getObject('obj1').setProp('x',50);
             t.ok(B.hasPendingChanges(),'pending changes now');
         })
-        .then(()=>wait(2000))
+        .then(()=>wait(DELAY))
         //B reconnects
         .then(()=>{
             B.connect();
         })
-        .then(()=>wait(2000))
+        .then(()=>wait(DELAY))
         //verify that A got the changes
         .then(()=>{
             t.equal(A.getObject('obj1').getProp('x'),50,
                 'A got remote delayed change from B');
         })
+
+
+
+        // UNDO / REDO test
+        .then(()=>{
+            //make two changes
+            A.getObject('obj1').setProp('z',1);
+            A.getObject('obj1').setProp('z',5);
+        })
+        //wait to propagate
+        .then(()=>wait(DELAY))
+        //verify, then undo the last change
+        .then(()=>{
+            t.equal(A.getObject('obj1').getProp('z'),5);
+            t.equal(B.getObject('obj1').getProp('z'),5);
+            t.ok(!A.hasRedo());
+            A.undo();
+            t.ok(A.hasRedo());
+        })
+        .then(()=>wait(DELAY))  //wait to propagate
+        //verify, A goes offline, then B changes it again
+        .then(()=>{
+            t.equal(A.getObject('obj1').getProp('z'),1);
+            t.equal(B.getObject('obj1').getProp('z'),1);
+
+            A.disconnect();
+            B.getObject('obj1').setProp('z',10);
+        })
+        .then(()=>wait(DELAY))  //wait to propagate
+        //verify, A doesn't see the change but B does
+        .then(()=>{
+            t.equal(A.getObject('obj1').getProp('z'),1);
+            t.equal(B.getObject('obj1').getProp('z'),10);
+        })
+        //A redoes the change while offline
+        .then(()=>{
+            A.redo();
+        })
+        .then(()=>wait(DELAY))  //wait to propagate
+        //A reconnects
+        .then(()=>{
+            A.connect();
+        })
+        .then(()=>wait(DELAY))  //wait to propagate
+        //B gets the change now
+        .then(()=>{
+            t.equal(B.getObject('obj1').getProp('z'),5);
+        })
+
+
+
+
+        /*
+         //B changes it again
+         B.getObject('obj1').setProp('a',66);
+         assert.equal(A.getObject('obj1').getProp('a'),0);
+         assert.equal(B.getObject('obj1').getProp('a'),66);
+
+         //A redoes the change
+         assert(A.hasRedo());
+         A.redo();
+         assert.equal(A.getObject('obj1').getProp('a'),9);
+         assert(!A.hasRedo());
+         //B doesn't see the redo
+         assert.equal(B.getObject('obj1').getProp('a'),66);
+         //A connects
+         assert(A.hasPendingChanges());
+         A.connect();
+         assert(!A.hasPendingChanges());
+         //B sees the redo now
+         assert.equal(B.getObject('obj1').getProp('a'),9);
+
+         */
+
+
         .then(()=>{
             t.end();
             A.disconnect();
